@@ -1,0 +1,1 @@
+{"positive":[{"name":"sudo-to-root","events":[{"process":{"name":"sudo"},"user":{"effective":{"id":"0"}},"event":{"category":["process"]}}]}],"negative":[{"name":"unprivileged-process","events":[{"process":{"name":"sudo"},"user":{"effective":{"id":"1000"}},"event":{"category":["process"]}}]}]}

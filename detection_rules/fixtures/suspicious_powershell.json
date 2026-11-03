@@ -1,0 +1,1 @@
+{"positive":[{"name":"encoded-powershell","events":[{"process":{"name":"powershell.exe","command_line":"powershell.exe -enc SQBFAFgA"},"event":{"category":["process"],"type":["start"]}}]}],"negative":[{"name":"normal-powershell","events":[{"process":{"name":"powershell.exe","command_line":"powershell.exe Get-Date"},"event":{"category":["process"],"type":["start"]}}]}]}

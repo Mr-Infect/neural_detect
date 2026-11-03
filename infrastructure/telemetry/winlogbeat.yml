@@ -1,0 +1,17 @@
+winlogbeat.event_logs:
+  - name: Microsoft-Windows-Sysmon/Operational
+    ignore_older: 72h
+  - name: Security
+    event_id: 4624, 4625, 4672, 4688, 4697, 4698, 4720
+    ignore_older: 72h
+  - name: Microsoft-Windows-PowerShell/Operational
+    event_id: 4103, 4104
+    ignore_older: 72h
+processors:
+  - add_fields:
+      target: event
+      fields:
+        module: windows
+        dataset: windows.eventlog
+output.logstash:
+  hosts: ["localhost:5044"]

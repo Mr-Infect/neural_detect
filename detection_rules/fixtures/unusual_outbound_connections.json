@@ -1,0 +1,1 @@
+{"positive":[{"name":"port-4444","events":[{"event":{"category":["network"]},"destination":{"port":4444,"ip":"203.0.113.8"}}]}],"negative":[{"name":"https-port","events":[{"event":{"category":["network"]},"destination":{"port":443,"ip":"203.0.113.8"}}]}]}

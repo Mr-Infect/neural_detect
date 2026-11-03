@@ -1,0 +1,23 @@
+title: Unusual Outbound Connection Ports
+id: 32f59121-8ad8-4a0d-917c-b213445e8f07
+status: experimental
+description: Detects network connections to commonly abused non-standard service ports.
+author: NEURAL DETECT
+date: 2026/11/02
+references: []
+tags:
+  - attack.command_and_control
+  - attack.t1571
+logsource:
+  category: network_connection
+detection:
+  selection:
+    event.category: network
+    destination.port:
+      - 1337
+      - 4444
+      - 31337
+  condition: selection
+falsepositives:
+  - Approved applications using non-standard service ports.
+level: medium

@@ -1,0 +1,21 @@
+title: Linux Privilege Escalation via Sudo
+id: 32f59121-8ad8-4a0d-917c-b213445e8f03
+status: experimental
+description: Detects a sudo process creating a root effective user context.
+author: NEURAL DETECT
+date: 2026/11/02
+references: []
+tags:
+  - attack.privilege_escalation
+  - attack.t1548.003
+logsource:
+  category: process_creation
+  product: linux
+detection:
+  selection:
+    process.name: sudo
+    user.effective.id: "0"
+  condition: selection
+falsepositives:
+  - Approved administrative activity.
+level: medium

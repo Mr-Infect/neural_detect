@@ -1,0 +1,9 @@
+{
+  "rule_id": "nd-auth-failures-then-success",
+  "title": "Authentication Failures Followed by Success",
+  "description": "Detects a successful authentication from a source IP following repeated failures.",
+  "format": "eql",
+  "query": "sequence by source.ip with maxspan=10m [any where event.category == \"authentication\" and event.outcome == \"failure\"] [any where event.category == \"authentication\" and event.outcome == \"success\"]",
+  "index": ["neural-detect-*"],
+  "metadata": {"severity":"high","risk_score":68,"tags":["attack.credential_access","attack.t1110"],"author":"NEURAL DETECT"}
+}

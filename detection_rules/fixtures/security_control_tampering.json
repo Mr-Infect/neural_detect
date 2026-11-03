@@ -1,0 +1,1 @@
+{"positive":[{"name":"disable-defender","events":[{"process":{"name":"powershell.exe","command_line":"Set-MpPreference -DisableRealtimeMonitoring $true"},"event":{"category":["process"]}}]}],"negative":[{"name":"defender-status","events":[{"process":{"name":"powershell.exe","command_line":"Get-MpComputerStatus"},"event":{"category":["process"]}}]}]}

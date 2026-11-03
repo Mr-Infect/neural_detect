@@ -1,0 +1,1 @@
+{"positive":[{"name":"failed-logon","events":[{"event":{"code":"4625","category":["authentication"],"outcome":"failure"},"user":{"name":"analyst"}}]}],"negative":[{"name":"successful-logon","events":[{"event":{"code":"4624","category":["authentication"],"outcome":"success"},"user":{"name":"analyst"}}]}]}

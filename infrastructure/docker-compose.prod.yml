@@ -1,0 +1,15 @@
+services:
+  postgres:
+    restart: unless-stopped
+    ports: []
+  redis:
+    restart: unless-stopped
+    ports: []
+  api:
+    restart: unless-stopped
+    environment:
+      ND_ENVIRONMENT: production
+  worker:
+    restart: unless-stopped
+  frontend:
+    restart: unless-stopped

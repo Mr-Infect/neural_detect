@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools==75.8.0"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "neural-detect"
+version = "0.8.0"
+requires-python = ">=3.12"
+dependencies = ["fastapi==0.115.14", "uvicorn[standard]==0.34.3", "pydantic-settings==2.16.2", "sqlalchemy[asyncio]==2.0.55", "asyncpg==0.30.0", "alembic==1.20.1", "structlog==25.5.0", "psycopg[binary]==3.3.6", "elasticsearch[async]==8.17.1", "httpx==0.28.1", "pySigma==1.5.1", "pySigma-backend-elasticsearch==2.1.1", "PyYAML==6.0.3", "langgraph==1.2.19", "langgraph-checkpoint-postgres==3.2.0", "langchain-core==1.7.3", "pycryptodome==4.2.0"]
+[project.optional-dependencies]
+dev = ["pytest==8.4.2", "ruff==0.17.3"]
+[tool.setuptools.packages.find]
+include = ["ai_engine*", "ai_security*", "apps*", "core*", "integrations*", "detection_engine*"]
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+
+

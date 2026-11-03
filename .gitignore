@@ -1,0 +1,61 @@
+# Local secrets and environment configuration
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# Python virtual environments, caches, and build outputs
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+site/
+pip-wheel-metadata/
+
+# Node, Vite, and TypeScript outputs
+node_modules/
+apps/frontend/dist/
+*.tsbuildinfo
+.npm/
+
+# Local service data, model weights, and bulky generated files
+/data/
+/models/
+/ollama_data/
+.ollama/
+*.gguf
+*.safetensors
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.model
+*.bin
+*.tar
+*.tar.gz
+*.zip
+
+# Logs and temporary editor/OS files
+*.log
+tmp/
+temp/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

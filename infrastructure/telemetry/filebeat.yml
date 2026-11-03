@@ -1,0 +1,48 @@
+filebeat.inputs:
+  - type: filestream
+    id: linux-auth
+    enabled: true
+    paths: [/var/log/auth.log, /var/log/secure]
+    fields_under_root: true
+    fields:
+      event.category: [authentication]
+      event.module: linux
+      event.dataset: linux.auth
+  - type: filestream
+    id: linux-auditd
+    enabled: true
+    paths: [/var/log/audit/audit.log]
+    fields_under_root: true
+    fields:
+      event.category: [process]
+      event.module: auditd
+      event.dataset: auditd.log
+  - type: filestream
+    id: zeek-json
+    enabled: false
+    paths: [/opt/zeek/logs/current/*.log]
+    parsers:
+      - ndjson:
+          target: ""
+          add_error_key: true
+    fields_under_root: true
+    fields:
+      event.category: [network]
+      event.module: zeek
+      event.dataset: zeek.connection
+  - type: filestream
+    id: suricata-eve
+    enabled: false
+    paths: [/var/log/suricata/eve.json]
+    parsers:
+      - ndjson:
+          target: ""
+          add_error_key: true
+    fields_under_root: true
+    fields:
+      event.kind: alert
+      event.category: [intrusion_detection]
+      event.module: suricata
+      event.dataset: suricata.eve
+output.logstash:
+  hosts: ["localhost:5044"]

@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from detection_engine.compiler.native import compile_native
+from detection_engine.converters.pysigma import compile_sigma
+from detection_engine.validators.sigma import validate_sigma_source
+
+ROOT = Path(__file__).resolve().parents[1]
+LIBRARY = ROOT / "detection_rules" / "library"
+FIXTURES = ROOT / "detection_rules" / "fixtures"
+
+
+def main() -> None:
+    validated = 0
+    for path in sorted(LIBRARY.iterdir()):
+        if path.suffix == ".json":
+            rule = json.loads(path.read_text(encoding="utf-8"))
+            result = compile_native(rule["format"], rule["query"], rule.get("index", ["neural-detect-*"]))
+            if result.get("compiled_query") is None:
+                raise SystemExit(f"{path.name}: native compiler returned no query")
+        elif path.suffix in {".yml", ".yaml"}:
+            source = path.read_text(encoding="utf-8")
+            validate_sigma_source(source)
+            result = compile_sigma(source)
+            if not result["compiled_query"].strip():
+                raise SystemExit(f"{path.name}: Sigma compiler returned an empty query")
+        else:
+            continue
+        fixture_path = FIXTURES / f"{path.stem}.json"
+        if not fixture_path.exists():
+            raise SystemExit(f"{path.name}: missing positive/negative fixtures")
+        fixtures = json.loads(fixture_path.read_text(encoding="utf-8"))
+        if not fixtures.get("positive") or not fixtures.get("negative"):
+            raise SystemExit(f"{fixture_path.name}: positive and negative cases are required")
+        validated += 1
+    if validated != 10:
+        raise SystemExit(f"Expected 10 initial detections; found {validated}")
+    print(f"Validated and compiled {validated} detections with positive/negative fixtures.")
+
+
+if __name__ == "__main__":
+    main()

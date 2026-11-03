@@ -1,0 +1,9 @@
+{
+  "rule_id": "nd-ssh-brute-force",
+  "title": "SSH Brute Force",
+  "description": "Detects repeated SSH authentication failures grouped by source IP.",
+  "format": "threshold",
+  "query": {"field":"source.ip","group_by":["source.ip"],"threshold":5,"window":"5m","filter":"event.category:authentication AND event.outcome:failure AND process.name:sshd"},
+  "index": ["neural-detect-*"],
+  "metadata": {"severity":"high","risk_score":73,"tags":["attack.credential_access","attack.t1110.001"],"author":"NEURAL DETECT"}
+}

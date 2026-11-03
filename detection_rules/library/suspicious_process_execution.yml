@@ -1,0 +1,23 @@
+title: Suspicious Windows Proxy Execution
+id: 32f59121-8ad8-4a0d-917c-b213445e8f06
+status: experimental
+description: Detects potentially abused Windows proxy execution utilities.
+author: NEURAL DETECT
+date: 2026/11/02
+references: []
+tags:
+  - attack.defense_evasion
+  - attack.t1218
+logsource:
+  category: process_creation
+  product: windows
+detection:
+  selection:
+    process.name:
+      - regsvr32.exe
+      - mshta.exe
+      - rundll32.exe
+  condition: selection
+falsepositives:
+  - Legitimate software installers and signed application components.
+level: high

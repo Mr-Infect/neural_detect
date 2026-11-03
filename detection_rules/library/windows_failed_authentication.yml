@@ -1,0 +1,20 @@
+title: Windows Failed Authentication
+id: 32f59121-8ad8-4a0d-917c-b213445e8f01
+status: experimental
+description: Detects Windows Security log authentication failures.
+author: NEURAL DETECT
+date: 2026/11/02
+references: []
+tags:
+  - attack.credential_access
+  - attack.t1110
+logsource:
+  product: windows
+  service: security
+detection:
+  selection:
+    event.code: "4625"
+  condition: selection
+falsepositives:
+  - Expected failures from users entering incorrect passwords.
+level: medium

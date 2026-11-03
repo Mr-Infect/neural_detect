@@ -1,0 +1,1 @@
+{"positive":[{"name":"regsvr32-proxy","events":[{"process":{"name":"regsvr32.exe","command_line":"regsvr32.exe /s payload.sct"},"event":{"category":["process"]}}]}],"negative":[{"name":"notepad","events":[{"process":{"name":"notepad.exe","command_line":"notepad.exe"},"event":{"category":["process"]}}]}]}
