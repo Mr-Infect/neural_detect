@@ -63,3 +63,7 @@ Phase screenshots are kept in artifacts. Heavy model weights, service data, loca
 ## Release candidate v1.0.0-rc.1
 
 See [QUICKSTART.md](QUICKSTART.md), [ARCHITECTURE.md](ARCHITECTURE.md), [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), [THREAT_MODEL.md](THREAT_MODEL.md), [API_REFERENCE.md](API_REFERENCE.md), [DETECTION_GUIDE.md](DETECTION_GUIDE.md), [MODEL_CONFIGURATION.md](MODEL_CONFIGURATION.md), [BENCHMARKS.md](BENCHMARKS.md), and [deployment/backup instructions](docs/DEPLOYMENT.md). Release blockers and evidence are tracked in [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md). No stable v1.0 release is claimed until that checklist is closed.
+
+## Beginner architecture and workflows
+
+For a guided explanation of the services, application data flows, and GitHub Actions checks, see [the beginner architecture and workflow guide](docs/BEGINNER_ARCHITECTURE_AND_WORKFLOWS.md).
