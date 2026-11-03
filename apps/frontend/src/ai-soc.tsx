@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api";
 
 type Props={mode:"hunting"|"investigations"};
 type Alert={id:string;title:string;severity:string;timestamp?:string;host?:string;status:string;incident_id?:string|null};
 type RecordData={incident:Record<string,any>;investigations?:Record<string,any>[];notes?:Record<string,any>[];audit_history?:Record<string,any>[]};
-const api=async(path:string,init?:RequestInit)=>{const r=await fetch(path,{...init,headers:{"Content-Type":"application/json",...(init?.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||"Request failed with HTTP "+r.status);return d};
+const api=async(path:string,init?:RequestInit)=>{const r=await apiFetch(path,{...init,headers:{"Content-Type":"application/json",...(init?.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||"Request failed with HTTP "+r.status);return d};
 export function SocAgentsPage({mode}:Props){
  const [tab,setTab]=useState(mode),[alerts,setAlerts]=useState<Alert[]>([]),[incidents,setIncidents]=useState<Record<string,any>[]>([]);
  const [selected,setSelected]=useState<RecordData|null>(null),[selectedId,setSelectedId]=useState("");

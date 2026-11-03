@@ -5,12 +5,13 @@ from integrations.elasticsearch.alert_service import recent_alerts
 from integrations.elasticsearch.client import get_client
 
 
-async def dashboard_summary() -> dict[str, Any]:
+async def dashboard_summary(tenant_id: str = "default") -> dict[str, Any]:
     index = get_settings().elasticsearch_index_pattern
     query = {
         "index": index,
         "size": 0,
         "track_total_hits": True,
+        "query": {"term": {"tenant.id": tenant_id}},
         "allow_no_indices": True,
         "ignore_unavailable": True,
         "aggs": {
@@ -42,5 +43,5 @@ async def dashboard_summary() -> dict[str, Any]:
         "authentication_failures": aggregations.get("auth_failures", {}).get("doc_count", 0),
         "suspicious_processes": aggregations.get("suspicious_processes", {}).get("doc_count", 0),
         "network_events": aggregations.get("network_activity", {}).get("doc_count", 0),
-        "recent_alerts": await recent_alerts(8),
+        "recent_alerts": await recent_alerts(8, tenant_id),
     }

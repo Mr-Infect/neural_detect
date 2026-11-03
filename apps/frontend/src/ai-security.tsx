@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api";
 
 type Finding={finding_id:string;category:string;severity:string;summary:string;remediation:string;first_seen_at?:string;remediation_history?:{status:string;created_at:string}[]};
 type Evaluation={id:string;agent_id:string;benchmark_version:string;overall_status:string;run_live_model:boolean;model_name?:string;metrics:Record<string,unknown>;results:{case_id:string;category:string;status:string;severity:string;summary:string;evidence?:string}[];findings:Finding[];created_at:string};
-const api=async(path:string,init?:RequestInit)=>{const r=await fetch(path,{...init,headers:{"Content-Type":"application/json",...(init?.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||"Request failed: "+r.status);return d};
+const api=async(path:string,init?:RequestInit)=>{const r=await apiFetch(path,{...init,headers:{"Content-Type":"application/json",...(init?.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||"Request failed: "+r.status);return d};
 export function AISecurityPage(){
  const [tenant,setTenant]=useState("default"),[history,setHistory]=useState<Evaluation[]>([]),[selected,setSelected]=useState<Evaluation|null>(null);
  const [live,setLive]=useState(true),[agent,setAgent]=useState("platform"),[busy,setBusy]=useState(false),[error,setError]=useState("");

@@ -10,6 +10,7 @@ async def execute_eql(
     *,
     size: int = 100,
     filter_query: dict[str, Any] | None = None,
+    tenant_id: str = "default",
     timeout: str = "10s",
 ) -> dict[str, Any]:
     validate_index(index)
@@ -18,7 +19,7 @@ async def execute_eql(
         query=query,
         timestamp_field="@timestamp",
         size=min(max(size, 1), 100),
-        filter=filter_query,
+        filter={"bool": {"filter": [{"term": {"tenant.id": tenant_id}}] + ([filter_query] if filter_query else [])}},
         wait_for_completion_timeout=timeout,
     )
     return response.body

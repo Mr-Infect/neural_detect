@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api";
 
 type IntelResult={document_id:string;title:string;object_type:string;source_name:string;source_url:string;source_object_id:string;content_hash:string;score:number;snippets:string[];untrusted_source:boolean};
-const api=async(path:string,init?:RequestInit)=>{const r=await fetch(path,{...init,headers:{"Content-Type":"application/json",...(init?.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||"Request failed: "+r.status);return d};
+const api=async(path:string,init?:RequestInit)=>{const r=await apiFetch(path,{...init,headers:{"Content-Type":"application/json",...(init?.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||"Request failed: "+r.status);return d};
 export function IntelligencePage(){
  const [tenant,setTenant]=useState("default"),[query,setQuery]=useState("credential dumping techniques and related indicators");
  const [answer,setAnswer]=useState<IntelResult[]>([]),[version,setVersion]=useState<any>(null),[indicators,setIndicators]=useState<any[]>([]),[techniques,setTechniques]=useState<any[]>([]);

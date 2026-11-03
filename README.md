@@ -8,7 +8,7 @@ From the project directory, run:
 
     ./scripts/setup.sh
 
-The setup script creates a private .env with fresh local secrets if one is not present, builds and starts this project's Docker Compose services, applies database migrations, installs Elasticsearch mappings, and seeds the starter detection rules.
+The setup script creates a private .env with fresh local secrets and a bootstrap administrator if one is not present, builds and starts this project's Docker Compose services, applies database migrations, installs Elasticsearch mappings, and seeds the starter detection rules. Sign in as admin@neural-detect.local; the generated password is stored in the ignored .env as ND_BOOTSTRAP_ADMIN_PASSWORD.
 
 Ollama is configured as a native WSL service. Start Ollama separately with ollama serve; then optionally pull the configured models with:
 
@@ -29,7 +29,7 @@ The ATT&CK sync downloads a large bundle and embeds its searchable content, so i
 
 ## Python development
 
-Python 3.12 is required. The project and runtime dependencies are pinned in pyproject.toml and requirements.txt. Install development tools in a virtual environment:
+Python 3.12 is required. The project and runtime dependencies are pinned in pyproject.toml, requirements.txt, and the fully resolved requirements.lock. Install development tools in a virtual environment:
 
     python3 -m venv .venv
     source .venv/bin/activate
@@ -45,7 +45,7 @@ The API and worker run from Compose. Run Compose commands from WSL when working 
 - Threat intelligence ingests versioned MITRE ATT&CK/STIX content into PostgreSQL, Elasticsearch, and Qdrant.
 - The AI Security Assurance Engine stores repeatable control evaluations and synthetic adversarial prompt results. Start it from the AI security assurance page or POST /api/v1/ai-security/evaluations.
 
-The assurance dashboard currently reports a high-severity tenant identity-binding gap: tenant-scoped endpoints accept a caller-supplied tenant_id because authentication and RBAC are not yet implemented. The evaluation reports this honestly; do not expose the development API to untrusted networks.
+Phase 9 adds signed login sessions, PBKDF2 password storage, tenant-bound RBAC decisions through OPA, audited identity changes, expiring second-person approvals, and an optional SOAR webhook. Tenant-scoped Elasticsearch and database reads use the authenticated tenant. External response actions stay unavailable until a SOAR webhook is configured.
 
 ## Validation
 
@@ -58,3 +58,8 @@ Frontend production build:
     docker compose run --rm --no-deps frontend npm run build
 
 Phase screenshots are kept in artifacts. Heavy model weights, service data, local caches, and generated build outputs are excluded by .gitignore.
+
+
+## Release candidate v1.0.0-rc.1
+
+See [QUICKSTART.md](QUICKSTART.md), [ARCHITECTURE.md](ARCHITECTURE.md), [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), [THREAT_MODEL.md](THREAT_MODEL.md), [API_REFERENCE.md](API_REFERENCE.md), [DETECTION_GUIDE.md](DETECTION_GUIDE.md), [MODEL_CONFIGURATION.md](MODEL_CONFIGURATION.md), [BENCHMARKS.md](BENCHMARKS.md), and [deployment/backup instructions](docs/DEPLOYMENT.md). Release blockers and evidence are tracked in [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md). No stable v1.0 release is claimed until that checklist is closed.

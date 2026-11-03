@@ -38,14 +38,33 @@ if [[ ! -f .env ]]; then
   cp .env.example .env
   DB_PASSWORD="$(openssl rand -hex 32)"
   APP_SECRET="$(openssl rand -hex 32)"
+  ADMIN_PASSWORD="$(openssl rand -hex 32)"
   sed -i "s#^POSTGRES_PASSWORD=.*#POSTGRES_PASSWORD=$DB_PASSWORD#" .env
   sed -i "s#^ND_DATABASE_URL=.*#ND_DATABASE_URL=postgresql+asyncpg://neural:$DB_PASSWORD@postgres:5432/neural_detect#" .env
   sed -i "s#^ND_SECRET_KEY=.*#ND_SECRET_KEY=$APP_SECRET#" .env
+  sed -i "s#^ND_BOOTSTRAP_ADMIN_PASSWORD=.*#ND_BOOTSTRAP_ADMIN_PASSWORD=$ADMIN_PASSWORD#" .env
   chmod 600 .env
   echo "Created .env with fresh local secrets."
 fi
 
-if grep -Eq '^(POSTGRES_PASSWORD|ND_SECRET_KEY)=((replace-me)|(replace-with-a-random-secret-before-deployment))$' .env; then
+if ! grep -q '^ND_BOOTSTRAP_ADMIN_EMAIL=' .env; then
+  printf '%s\n' 'ND_BOOTSTRAP_ADMIN_EMAIL=admin@neural-detect.local' >> .env
+fi
+if ! grep -q '^ND_BOOTSTRAP_ADMIN_PASSWORD=' .env || grep -q '^ND_BOOTSTRAP_ADMIN_PASSWORD=generate-a-random-32-byte-secret$' .env; then
+  ADMIN_PASSWORD="$(openssl rand -hex 32)"
+  if grep -q '^ND_BOOTSTRAP_ADMIN_PASSWORD=' .env; then
+    sed -i "s#^ND_BOOTSTRAP_ADMIN_PASSWORD=.*#ND_BOOTSTRAP_ADMIN_PASSWORD=$ADMIN_PASSWORD#" .env
+  else
+    printf 'ND_BOOTSTRAP_ADMIN_PASSWORD=%s\n' "$ADMIN_PASSWORD" >> .env
+  fi
+fi
+for entry in 'ND_OPA_URL=http://opa:8181' 'ND_SOAR_WEBHOOK_URL=' 'ND_SOAR_WEBHOOK_TOKEN='; do
+  key="${entry%%=*}"
+  grep -q "^$key=" .env || printf '%s\n' "$entry" >> .env
+done
+chmod 600 .env
+
+if grep -Eq '^(POSTGRES_PASSWORD|ND_SECRET_KEY|ND_BOOTSTRAP_ADMIN_PASSWORD)=((replace-me)|(replace-with-a-random-secret-before-deployment)|(generate-a-random-32-byte-secret))$' .env; then
   echo ".env still contains example secrets. Replace them before setup." >&2
   exit 1
 fi
@@ -71,6 +90,7 @@ wait_for_url() {
   return 1
 }
 
+wait_for_url http://127.0.0.1:8181/health
 wait_for_url http://127.0.0.1:9200/
 wait_for_url http://127.0.0.1:8001/api/v1/health
 
@@ -90,4 +110,5 @@ echo "NEURAL DETECT is ready:"
 echo "  Frontend:  http://localhost:5173"
 echo "  API docs:  http://localhost:8001/docs"
 echo "  Kibana:    http://localhost:5601"
+echo "  Login:     admin@neural-detect.local (password is stored in ignored .env)"
 docker compose ps

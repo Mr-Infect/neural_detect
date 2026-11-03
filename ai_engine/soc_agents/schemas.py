@@ -1,4 +1,5 @@
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,6 +32,7 @@ class IncidentStatusRequest(BaseModel):
     actor:str=Field(default="analyst",min_length=1,max_length=128,pattern=r"^[A-Za-z0-9_.:@-]+$")
     status:Literal["open","in_progress","resolved","closed"]
     note:str|None=Field(default=None,max_length=2000)
+    approval_id:UUID|None=None
 
 class EvidenceFinding(BaseModel):
     model_config=ConfigDict(extra="forbid")

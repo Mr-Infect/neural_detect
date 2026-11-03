@@ -34,7 +34,8 @@ apps/frontend/dist/
 *.tsbuildinfo
 .npm/
 
-# Local service data, model weights, and bulky generated files
+# Local service data, model weights, screenshots, and bulky generated files
+artifacts/
 /data/
 /models/
 /ollama_data/

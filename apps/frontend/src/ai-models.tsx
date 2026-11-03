@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "./api";
 
 type Provider = { provider: string; status: string; cloud: boolean; model: string; available_models?: number };
 type Evaluation = { id:string; provider:string; model:string; model_version:string|null; output_kind:string; latency_ms:number; prompt_tokens:number|null; completion_tokens:number|null; output_valid:boolean; error_code:string|null; created_at:string };
@@ -20,7 +21,7 @@ export function AIModelsPage(){
   const refresh=useCallback(async()=>{
     setLoading(true);
     try{
-      const [p,e]=await Promise.all([fetch("/api/v1/ai/models/providers"),fetch("/api/v1/ai/models/evaluations")]);
+      const [p,e]=await Promise.all([apiFetch("/api/v1/ai/models/providers"),apiFetch("/api/v1/ai/models/evaluations")]);
       if(!p.ok||!e.ok) throw new Error("Model gateway status is unavailable.");
       setProviders(await p.json());setEvaluations(await e.json());
     }catch(reason){setError(reason instanceof Error?reason.message:"Could not load model gateway.");}
@@ -30,7 +31,7 @@ export function AIModelsPage(){
   const submit=async()=>{
     setBusy(true);setError("");setResult(null);
     try{
-      const response=await fetch("/api/v1/ai/models/infer",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tenant_id:"default",prompt,output_kind:outputKind,provider,cloud_consent:cloudConsent,contains_raw_telemetry:rawTelemetry})});
+      const response=await apiFetch("/api/v1/ai/models/infer",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tenant_id:"default",prompt,output_kind:outputKind,provider,cloud_consent:cloudConsent,contains_raw_telemetry:rawTelemetry})});
       const body=await response.json();
       if(!response.ok) throw new Error(typeof body.detail==="string"?body.detail:body.detail?.message??"Inference failed.");
       setResult(body as Result);await refresh();

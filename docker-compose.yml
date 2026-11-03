@@ -34,7 +34,8 @@ services:
     ports: ["5044:5044","9600:9600"]
   opa:
     image: openpolicyagent/opa:1.0.0
-    command: ["run","--server","--addr=0.0.0.0:8181"]
+    command: ["run","--server","--addr=0.0.0.0:8181","/policy/neural_detect.rego"]
+    volumes: ["./core/policy_engine/neural_detect.rego:/policy/neural_detect.rego:ro"]
     ports: ["8181:8181"]
   api:
     build: {context: ., dockerfile: apps/api/Dockerfile}
@@ -44,8 +45,16 @@ services:
         condition: service_healthy
       ollama-relay:
         condition: service_started
+      opa:
+        condition: service_started
     extra_hosts: ["host.docker.internal:host-gateway"]
     ports: ["8001:8000"]
+    healthcheck:
+      test: ["CMD","python","-c","import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/api/v1/health\",timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
   ollama-relay:
     build: {context: ., dockerfile: apps/api/Dockerfile}
     network_mode: host

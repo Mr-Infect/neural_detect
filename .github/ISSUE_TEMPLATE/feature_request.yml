@@ -1,0 +1,14 @@
+name: Feature request
+description: Propose a capability or improvement
+body:
+  - type: textarea
+    id: need
+    attributes: { label: Problem to solve }
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes: { label: Proposed behavior }
+    validations: { required: true }
+  - type: textarea
+    id: security
+    attributes: { label: Security, privacy, and tenant considerations }

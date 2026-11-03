@@ -123,7 +123,7 @@ class SocAgentService:
                     }
                 }
                 results = await execute_eql(
-                    "neural-detect-*", query, size=100, filter_query=filters
+                    "neural-detect-*", query, size=100, filter_query=filters, tenant_id=payload.tenant_id
                 )
                 hits = results.get("hits", {})
                 rows = [
@@ -222,7 +222,7 @@ class SocAgentService:
             return self._dump(row) if row else None
 
     async def list_alerts(self, limit: int = 25, tenant_id: str = "default"):
-        alerts = await recent_alerts(min(max(limit, 1), 100))
+        alerts = await recent_alerts(min(max(limit, 1), 100), tenant_id)
         async with SessionFactory() as s:
             incidents = (
                 await s.scalars(

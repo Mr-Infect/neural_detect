@@ -1,0 +1,17 @@
+name: Bug report
+description: Report a reproducible defect
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Include the observed behavior and expected behavior.
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes: { label: Steps to reproduce }
+    validations: { required: true }
+  - type: textarea
+    id: environment
+    attributes: { label: Environment and logs, description: Remove secrets and sensitive telemetry before posting. }
+    validations: { required: true }

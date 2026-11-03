@@ -10,6 +10,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from ai_engine.detection_agent.service import agent
 from ai_engine.model_gateway.router import gateway
 from apps.api.routes.ai_security import router as ai_security_router
+from apps.api.routes.auth import router as auth_router
+from apps.api.routes.automation import router as automation_router
 from apps.api.routes.dashboard import router as dashboard_router
 from apps.api.routes.detection_agent import router as detection_agent_router
 from apps.api.routes.detection_lifecycle import router as detection_lifecycle_router
@@ -18,8 +20,11 @@ from apps.api.routes.intelligence import router as intelligence_router
 from apps.api.routes.model_gateway import router as model_gateway_router
 from apps.api.routes.soc_agents import router as soc_agents_router
 from apps.api.routes.telemetry import router as telemetry_router
+from core.authentication.service import ensure_bootstrap_admin
+from core.authorization.middleware import authorize_request
 from core.config.settings import get_settings
 from core.database.session import SessionFactory, engine
+from core.version import __version__
 from integrations.elasticsearch.client import close_client
 
 settings = get_settings()
@@ -28,11 +33,10 @@ log = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    structlog.configure(
-        wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(logging, settings.log_level.upper(), logging.INFO)
-        )
-    )
+    structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(
+        getattr(logging, settings.log_level.upper(), logging.INFO)
+    ))
+    await ensure_bootstrap_admin()
     await agent.start(settings.database_url, settings.secret_key.get_secret_value())
     yield
     await agent.close()
@@ -41,12 +45,11 @@ async def lifespan(_: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(
-    title=settings.app_name,
-    version="0.8.0",
-    description="Local-first AI detection engineering platform API.",
-    lifespan=lifespan,
-)
+app = FastAPI(title=settings.app_name, version=__version__,
+              description="Local-first security engineering platform API.", lifespan=lifespan)
+app.middleware("http")(authorize_request)
+app.include_router(auth_router, prefix=settings.api_prefix)
+app.include_router(automation_router, prefix=settings.api_prefix)
 app.include_router(telemetry_router, prefix=settings.api_prefix)
 app.include_router(dashboard_router, prefix=settings.api_prefix)
 app.include_router(detections_router, prefix=settings.api_prefix)
@@ -62,16 +65,9 @@ app.include_router(ai_security_router, prefix=settings.api_prefix)
 async def unhandled(request: Request, exc: Exception) -> JSONResponse:
     request_id = request.headers.get("x-request-id", "unassigned")
     log.exception("unhandled_request_error", request_id=request_id, path=request.url.path)
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": {
-                "code": "INTERNAL_ERROR",
-                "message": "Request failed.",
-                "request_id": request_id,
-            }
-        },
-    )
+    return JSONResponse(status_code=500, content={"error": {
+        "code": "INTERNAL_ERROR", "message": "Request failed.", "request_id": request_id,
+    }})
 
 
 @app.get("/health")

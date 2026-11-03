@@ -1,20 +1,17 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.config.settings import get_settings
-from core.database.models import DetectionApproval, DetectionRule, DetectionRuleVersion
+from core.database.models import AuditEvent, DetectionApproval, DetectionRule, DetectionRuleVersion
 from core.database.session import get_session
 from detection_engine.compiler.native import compile_native
 from detection_engine.converters.pysigma import compile_sigma
@@ -60,7 +57,7 @@ class ApprovalRequest(BaseModel):
 
 class ApprovalReview(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    reviewer: str = Field(min_length=2, max_length=256)
+    reviewer: str | None = Field(default=None, min_length=2, max_length=256)
     decision: Literal["approved", "rejected"]
     note: str | None = Field(default=None, max_length=2000)
 
@@ -227,13 +224,20 @@ async def test_detection(rule_id: UUID, fixtures: FixtureRequest, session: Annot
 
 
 @router.post("/{rule_id}/approvals", status_code=201)
-async def request_approval(rule_id: UUID, payload: ApprovalRequest, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
+async def request_approval(rule_id: UUID, payload: ApprovalRequest, request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
     rule = await _load(rule_id, session)
     approval = DetectionApproval(
-        detection_rule_id=rule.id, requested_by=payload.requested_by, rule_version=rule.current_version, status="pending",
+        detection_rule_id=rule.id, requested_by=request.state.principal["email"],
+        rule_version=rule.current_version, status="pending",
         expires_at=datetime.now(UTC) + timedelta(hours=24),
     )
     session.add(approval)
+    await session.flush()
+    session.add(AuditEvent(
+        actor=request.state.principal["email"], tenant_id=request.state.principal["tenant_id"],
+        action="detection.approval_requested", resource_type="detection_approval",
+        resource_id=str(approval.id), details={"rule_id": rule.rule_id, "version": rule.current_version},
+    ))
     await session.commit()
     await session.refresh(approval)
     return {"id": str(approval.id), "rule_id": rule.rule_id, "status": approval.status, "rule_version": approval.rule_version, "expires_at": approval.expires_at.isoformat()}
@@ -243,30 +247,32 @@ async def request_approval(rule_id: UUID, payload: ApprovalRequest, session: Ann
 async def review_approval(
     approval_id: UUID,
     payload: ApprovalReview,
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
-    approval_token: str | None = Header(default=None, alias="X-Approval-Token"),
 ) -> dict[str, Any]:
-    configured = get_settings().detection_approval_token
-    if configured is None or approval_token is None or not hmac.compare_digest(
-        hashlib.sha256(approval_token.encode()).digest(),
-        hashlib.sha256(configured.get_secret_value().encode()).digest(),
-    ):
-        raise HTTPException(status_code=403, detail="A valid configured approval token is required.")
     approval = await session.get(DetectionApproval, approval_id)
     if approval is None:
         raise HTTPException(status_code=404, detail="Approval request not found.")
+    principal = request.state.principal
+    if approval.requested_by.lower() == principal["email"].lower():
+        raise HTTPException(status_code=403, detail="A different human reviewer must decide this request.")
     if approval.status != "pending" or approval.expires_at <= datetime.now(UTC):
         raise HTTPException(status_code=409, detail="Approval is no longer pending or has expired.")
+    if payload.decision == "rejected" and not (payload.note or "").strip():
+        raise HTTPException(status_code=422, detail="A rejection reason is required.")
     approval.status = payload.decision
-    approval.reviewer = payload.reviewer
+    approval.reviewer = principal["email"]
     approval.decision_note = payload.note
     approval.reviewed_at = datetime.now(UTC)
+    session.add(AuditEvent(actor=principal["email"], tenant_id=principal["tenant_id"],
+        action="detection.approval_" + payload.decision, resource_type="detection_approval",
+        resource_id=str(approval.id), details={"reason": payload.note}))
     await session.commit()
     return {"id": str(approval.id), "status": approval.status, "reviewer": approval.reviewer, "reviewed_at": approval.reviewed_at.isoformat()}
 
 
 @router.post("/{rule_id}/deploy")
-async def deploy_detection(rule_id: UUID, approval_id: UUID, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
+async def deploy_detection(rule_id: UUID, approval_id: UUID, request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
     rule = await _load(rule_id, session)
     approval = await session.get(DetectionApproval, approval_id)
     if approval is None or approval.detection_rule_id != rule.id:
@@ -296,5 +302,9 @@ async def deploy_detection(rule_id: UUID, approval_id: UUID, session: Annotated[
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail="Kibana could not deploy the approved detection.") from exc
     approval.status = "deployed"
+    session.add(AuditEvent(actor=request.state.principal["email"],
+        tenant_id=request.state.principal["tenant_id"], action="detection.deployed",
+        resource_type="detection_rule", resource_id=str(rule.id),
+        details={"approval_id": str(approval.id), "rule_id": rule.rule_id}))
     await session.commit()
     return {"rule_id": rule.rule_id, "approval_id": str(approval.id), "deployment": deployed}

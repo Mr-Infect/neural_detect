@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { apiFetch } from "./api";
 
 type Detection = {
   id: string;
@@ -14,7 +15,7 @@ type Detection = {
 type Approval = { id: string; status: string; expires_at: string };
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });

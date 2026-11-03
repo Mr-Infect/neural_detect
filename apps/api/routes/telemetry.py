@@ -51,6 +51,7 @@ class SearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     index: str = "neural-detect-*"
     query: dict[str, Any] = Field(default_factory=lambda: {"match_all": {}})
+    tenant_id: str = Field(default="default", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
     size: int = Field(default=50, ge=1, le=500)
     offset: int = Field(default=0, ge=0, le=100000)
 
@@ -58,10 +59,12 @@ class EqlRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     index: str = "neural-detect-*"
     query: str = Field(min_length=1, max_length=10000)
+    tenant_id: str = Field(default="default", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
 
 class EsqlRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     query: str = Field(min_length=1, max_length=10000)
+    tenant_id: str = Field(default="default", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
 
 @router.get("/sources")
 async def get_sources(session: Annotated[AsyncSession, Depends(get_session)]) -> list[dict[str, Any]]:
@@ -90,7 +93,7 @@ async def telemetry_indices() -> list[dict[str, Any]]:
 @router.post("/search")
 async def telemetry_search(payload: SearchRequest) -> dict[str, Any]:
     try:
-        return await search_service.search(payload.index, payload.query, size=payload.size, offset=payload.offset)
+        return await search_service.search(payload.index, payload.query, tenant_id=payload.tenant_id, size=payload.size, offset=payload.offset)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except TransportError as exc:
@@ -99,7 +102,7 @@ async def telemetry_search(payload: SearchRequest) -> dict[str, Any]:
 @router.post("/eql")
 async def telemetry_eql(payload: EqlRequest) -> dict[str, Any]:
     try:
-        return await execute_eql(payload.index, payload.query)
+        return await execute_eql(payload.index, payload.query, tenant_id=payload.tenant_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except TransportError as exc:
@@ -108,16 +111,18 @@ async def telemetry_eql(payload: EqlRequest) -> dict[str, Any]:
 @router.post("/esql")
 async def telemetry_esql(payload: EsqlRequest) -> dict[str, Any]:
     try:
-        return await execute_esql(payload.query)
+        from ai_engine.soc_agents.service import SocAgentService
+        safe_query = SocAgentService._secure_esql(payload.query, payload.tenant_id, 24)
+        return await execute_esql(safe_query)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except TransportError as exc:
         raise HTTPException(status_code=503, detail="Elasticsearch ES|QL is unavailable.") from exc
 
 @router.get("/alerts")
-async def telemetry_alerts(limit: int = Query(default=20, ge=1, le=100)) -> list[dict[str, Any]]:
+async def telemetry_alerts(limit: int = Query(default=20, ge=1, le=100), tenant_id: str = Query(default="default", min_length=1, max_length=128)) -> list[dict[str, Any]]:
     try:
-        return await alert_service.recent_alerts(limit)
+        return await alert_service.recent_alerts(limit, tenant_id)
     except TransportError as exc:
         raise HTTPException(status_code=503, detail="Elasticsearch alert retrieval is unavailable.") from exc
 
@@ -131,8 +136,8 @@ async def telemetry_health() -> dict[str, Any]:
         return {"status": "unavailable", "authenticated": auth_configured(get_settings()), "cluster": None, "indices": 0}
 
 @router.get("/dashboard/summary")
-async def summary() -> dict[str, Any]:
+async def summary(tenant_id: str = Query(default="default", min_length=1, max_length=128)) -> dict[str, Any]:
     try:
-        return await dashboard_service.dashboard_summary()
+        return await dashboard_service.dashboard_summary(tenant_id)
     except TransportError as exc:
         raise HTTPException(status_code=503, detail="Dashboard data is unavailable from Elasticsearch.") from exc

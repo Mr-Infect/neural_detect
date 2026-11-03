@@ -1,15 +1,55 @@
 services:
   postgres:
     restart: unless-stopped
-    ports: []
+    ports: !reset []
   redis:
     restart: unless-stopped
-    ports: []
+    ports: !reset []
+  qdrant:
+    restart: unless-stopped
+    ports: !reset []
+  elasticsearch:
+    profiles: [disabled-in-production]
+    restart: unless-stopped
+    ports: !reset []
+  kibana:
+    profiles: [disabled-in-production]
+    restart: unless-stopped
+    ports: !reset []
+  logstash:
+    profiles: [disabled-in-production]
+    restart: unless-stopped
+    ports: !reset []
+  opa:
+    restart: unless-stopped
+    ports: !reset []
+  otel-collector:
+    restart: unless-stopped
+    ports: !reset []
+  ollama:
+    ports: !reset []
   api:
     restart: unless-stopped
     environment:
       ND_ENVIRONMENT: production
+    ports: !reset ["127.0.0.1:8001:8000"]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
   worker:
     restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
   frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile.prod
+    ports: !reset ["127.0.0.1:5173:8080"]
     restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]

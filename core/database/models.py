@@ -13,6 +13,7 @@ class Tenant(Base):
     __tablename__ = "tenants"
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 class User(Base):
@@ -21,6 +22,7 @@ class User(Base):
     tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(40), nullable=False, default="analyst")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 class TelemetrySource(Base):
@@ -76,3 +78,34 @@ class DetectionApproval(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+class ApprovalRequest(Base):
+    __tablename__ = "approval_requests"
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    action_type: Mapped[str] = mapped_column(String(48), nullable=False, index=True)
+    risk_level: Mapped[str] = mapped_column(String(24), nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending", index=True)
+    requested_by: Mapped[str] = mapped_column(String(320), nullable=False)
+    reviewer: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    execution_result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    actor: Mapped[str] = mapped_column(String(320), nullable=False)
+    action: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    resource_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    resource_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    details: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
