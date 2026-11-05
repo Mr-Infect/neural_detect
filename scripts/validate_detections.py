@@ -13,19 +13,30 @@ LIBRARY = ROOT / "detection_rules" / "library"
 FIXTURES = ROOT / "detection_rules" / "fixtures"
 
 
-def _run_live(rule_format: str, compiled: object, fixtures: dict, name: str) -> None:
-    import asyncio
-
+async def _run_live(jobs: list[tuple[str, str, object, dict]]) -> list[str]:
+    """Execute every fixture set in one event loop against Elasticsearch; return failure messages."""
     from detection_engine.testing.runner import run_fixture_tests
+    from integrations.elasticsearch.client import close_client
+    from integrations.elasticsearch.pipelines import install_ecs_index_template
 
-    outcome = asyncio.run(run_fixture_tests(rule_format, compiled, fixtures))
-    if not outcome["passed"]:
-        raise SystemExit(f"{name}: fixture failures: {', '.join(outcome['failures'])}")
+    failures: list[str] = []
+    try:
+        await install_ecs_index_template()  # same ECS mapping production uses
+        for name, rule_format, compiled, fixtures in jobs:
+            outcome = await run_fixture_tests(rule_format, compiled, fixtures)
+            status = "ok" if outcome["passed"] else "FAILED"
+            print(f"  live fixtures {status}: {name}")
+            if not outcome["passed"]:
+                failures.append(f"{name}: {', '.join(outcome['failures'])}")
+    finally:
+        await close_client()
+    return failures
 
 
 def main() -> None:
     live = "--live" in sys.argv  # execute fixtures against a disposable Elasticsearch (ELASTICSEARCH_URL)
     validated = 0
+    jobs: list[tuple[str, str, object, dict]] = []
     for path in sorted(LIBRARY.iterdir()):
         if path.suffix == ".json":
             rule = json.loads(path.read_text(encoding="utf-8"))
@@ -46,11 +57,16 @@ def main() -> None:
         fixtures = json.loads(fixture_path.read_text(encoding="utf-8"))
         if not fixtures.get("positive") or not fixtures.get("negative"):
             raise SystemExit(f"{fixture_path.name}: positive and negative cases are required")
-        if live:
-            _run_live(rule["format"] if path.suffix == ".json" else "sigma", result["compiled_query"], fixtures, path.name)
+        jobs.append((path.name, rule["format"] if path.suffix == ".json" else "sigma", result["compiled_query"], fixtures))
         validated += 1
     if validated == 0:
         raise SystemExit("No detections found in detection_rules/library")
+    if live:
+        import asyncio
+
+        failures = asyncio.run(_run_live(jobs))
+        if failures:
+            raise SystemExit("Fixture failures:\n  " + "\n  ".join(failures))
     print(f"Validated and compiled {validated} detections with positive/negative fixtures.")
 
 

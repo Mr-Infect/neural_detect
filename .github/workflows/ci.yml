@@ -8,6 +8,21 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    services:
+      # Disposable Elasticsearch so detection fixtures run against a real engine.
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.17.1
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+        ports:
+          - 9200:9200
+        options: >-
+          --health-cmd "curl -fs http://localhost:9200/_cluster/health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -18,6 +33,10 @@ jobs:
       - run: ruff check apps ai_engine ai_security core detection_engine integrations scripts tests
       - run: pytest -q
       - run: python -m scripts.validate_detections
+      - run: python -m scripts.validate_detections --live
+        env:
+          ND_ELASTICSEARCH_URL: http://localhost:9200
+          ND_ELASTICSEARCH_VERIFY_CERTS: "false"
       # PYSEC-2026-2447: diskcache 5.6.3 (transitive via pySigma) has no fixed release yet.
       # Ignored explicitly so any *new* advisory still fails CI. Remove once diskcache publishes a fix.
       - run: pip-audit --strict --ignore-vuln PYSEC-2026-2447 -r requirements.lock
