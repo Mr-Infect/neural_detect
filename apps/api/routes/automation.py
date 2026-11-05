@@ -177,7 +177,8 @@ async def execute_approved_action(approval_id: UUID, request: Request) -> dict:
             rule_id = row.payload.get("rule_id")
             if not rule_id:
                 raise HTTPException(status_code=422, detail="detection_deploy approvals require payload.rule_id.")
-            rule = await session.scalar(select(DetectionRule).where(DetectionRule.rule_id == rule_id))
+            rule = await session.scalar(select(DetectionRule).where(
+                DetectionRule.rule_id == rule_id, DetectionRule.tenant_id == row.tenant_id))
             if rule is None:
                 raise HTTPException(status_code=404, detail="The approved detection rule no longer exists.")
             if row.payload.get("version") != rule.current_version:
@@ -186,6 +187,7 @@ async def execute_approved_action(approval_id: UUID, request: Request) -> dict:
                 dispatch_payload = build_kibana_payload(
                     rule_id=rule.rule_id, title=rule.title, description=rule.description,
                     deployment=rule.deployment or {}, metadata=rule.rule_metadata,
+                    tenant_id=rule.tenant_id,
                 )
             except (KeyError, ValueError) as exc:
                 raise HTTPException(status_code=422, detail=f"Stored deployment is invalid: {exc}") from exc

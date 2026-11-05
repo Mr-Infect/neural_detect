@@ -31,3 +31,11 @@ curl -u "elastic:$ND_ELASTIC_PASSWORD" -X POST "localhost:9200/neural-detect-$(d
 ```
 
 Use only synthetic lab events. The alert appears in Kibana under **Security → Alerts** and in the web interface's **Recent alerts**.
+
+## Managing rules from Git with ndctl
+
+Keep rules and fixtures in a repository and let CI run `ndctl validate` and `ndctl test` on every change. `ndctl plan` shows what would change on the server and `ndctl apply` stores it; approval and deployment still follow the steps above. See [docs/CLI.md](docs/CLI.md).
+
+## Tenants
+
+Each rule belongs to one tenant. Users only see and change their own tenant's rules, the same Sigma ID can exist in two tenants, and Kibana rules for a non-default tenant are named `<tenant>.<rule id>` and tagged `tenant:<tenant>`.

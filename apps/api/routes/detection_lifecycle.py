@@ -24,6 +24,15 @@ router = APIRouter(prefix="/detections", tags=["detection-as-code"])
 FORMATS = {"sigma", "esql", "eql", "kql", "threshold"}
 
 
+def _tenant(request: Request) -> str:
+    """Rules belong to the caller's tenant; only administrators may act on another via ?tenant_id=."""
+    principal = request.state.principal
+    requested = request.query_params.get("tenant_id")
+    if requested and principal["role"] == "admin":
+        return requested
+    return principal["tenant_id"]
+
+
 class DetectionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_yaml: str | None = Field(default=None, max_length=64_000)
@@ -113,15 +122,15 @@ def _compile(payload: DetectionCreate | DetectionPatch, current: DetectionRule |
 
 def _serialize(rule: DetectionRule) -> dict[str, Any]:
     return {
-        "id": str(rule.id), "rule_id": rule.rule_id, "title": rule.title, "description": rule.description,
+        "id": str(rule.id), "tenant_id": rule.tenant_id, "rule_id": rule.rule_id, "title": rule.title, "description": rule.description,
         "format": rule.rule_format, "source_yaml": rule.source_yaml, "query": rule.native_query,
         "compiled_query": rule.compiled_query, "deployment": rule.deployment, "metadata": rule.rule_metadata,
         "version": rule.current_version, "created_at": rule.created_at.isoformat(), "updated_at": rule.updated_at.isoformat(),
     }
 
 
-async def _load(rule_id: UUID, session: AsyncSession) -> DetectionRule:
-    rule = await session.scalar(select(DetectionRule).where(DetectionRule.id == rule_id))
+async def _load(rule_id: UUID, session: AsyncSession, tenant: str) -> DetectionRule:
+    rule = await session.scalar(select(DetectionRule).where(DetectionRule.id == rule_id, DetectionRule.tenant_id == tenant))
     if rule is None:
         raise HTTPException(status_code=404, detail="Detection rule not found.")
     return rule
@@ -136,18 +145,20 @@ async def _save_version(rule: DetectionRule, session: AsyncSession) -> None:
 
 
 @router.get("")
-async def list_detections(session: Annotated[AsyncSession, Depends(get_session)]) -> list[dict[str, Any]]:
-    rules = (await session.scalars(select(DetectionRule).order_by(DetectionRule.title))).all()
+async def list_detections(request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> list[dict[str, Any]]:
+    rules = (await session.scalars(
+        select(DetectionRule).where(DetectionRule.tenant_id == _tenant(request)).order_by(DetectionRule.title)
+    )).all()
     return [_serialize(rule) for rule in rules]
 
 
 @router.post("", status_code=201)
-async def create_detection(payload: DetectionCreate, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
+async def create_detection(payload: DetectionCreate, request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
     try:
         fields = _compile(payload)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    rule = DetectionRule(**fields)
+    rule = DetectionRule(**fields, tenant_id=_tenant(request))
     session.add(rule)
     try:
         await session.flush()
@@ -161,13 +172,13 @@ async def create_detection(payload: DetectionCreate, session: Annotated[AsyncSes
 
 
 @router.get("/{rule_id}")
-async def get_detection(rule_id: UUID, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
-    return _serialize(await _load(rule_id, session))
+async def get_detection(rule_id: UUID, request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
+    return _serialize(await _load(rule_id, session, _tenant(request)))
 
 
 @router.patch("/{rule_id}")
-async def patch_detection(rule_id: UUID, payload: DetectionPatch, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
-    rule = await _load(rule_id, session)
+async def patch_detection(rule_id: UUID, payload: DetectionPatch, request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
+    rule = await _load(rule_id, session, _tenant(request))
     values = _compile(payload, rule)
     rule.current_version += 1
     for field, value in values.items():
@@ -183,8 +194,8 @@ async def patch_detection(rule_id: UUID, payload: DetectionPatch, session: Annot
 
 
 @router.post("/{rule_id}/validate")
-async def validate_detection(rule_id: UUID, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
-    rule = await _load(rule_id, session)
+async def validate_detection(rule_id: UUID, request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
+    rule = await _load(rule_id, session, _tenant(request))
     try:
         if rule.rule_format == "sigma":
             _, stable_id = validate_sigma_source(rule.source_yaml or "")
@@ -199,22 +210,22 @@ async def validate_detection(rule_id: UUID, session: Annotated[AsyncSession, Dep
 
 
 @router.post("/{rule_id}/compile")
-async def compile_detection(rule_id: UUID, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
-    rule = await _load(rule_id, session)
+async def compile_detection(rule_id: UUID, request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
+    rule = await _load(rule_id, session, _tenant(request))
     return {"rule_id": rule.rule_id, "format": rule.rule_format, "source": rule.source_yaml, "query": rule.compiled_query, "deployment": rule.deployment}
 
 
 @router.get("/{rule_id}/export")
-async def export_detection(rule_id: UUID, session: Annotated[AsyncSession, Depends(get_session)]) -> Response:
-    rule = await _load(rule_id, session)
+async def export_detection(rule_id: UUID, request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> Response:
+    rule = await _load(rule_id, session, _tenant(request))
     if not rule.source_yaml:
         raise HTTPException(status_code=409, detail="Only Sigma rules have a YAML source export.")
     return Response(rule.source_yaml, media_type="application/yaml", headers={"Content-Disposition": f'attachment; filename="{rule.rule_id}.yml"'})
 
 
 @router.post("/{rule_id}/test")
-async def test_detection(rule_id: UUID, fixtures: FixtureRequest, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
-    rule = await _load(rule_id, session)
+async def test_detection(rule_id: UUID, fixtures: FixtureRequest, request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
+    rule = await _load(rule_id, session, _tenant(request))
     compiled = rule.compiled_query
     if rule.rule_format == "sigma":
         compiled = str(compiled)
@@ -225,8 +236,8 @@ async def test_detection(rule_id: UUID, fixtures: FixtureRequest, session: Annot
 
 
 @router.get("/{rule_id}/approvals")
-async def list_approvals(rule_id: UUID, session: Annotated[AsyncSession, Depends(get_session)]) -> list[dict[str, Any]]:
-    rule = await _load(rule_id, session)
+async def list_approvals(rule_id: UUID, request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> list[dict[str, Any]]:
+    rule = await _load(rule_id, session, _tenant(request))
     rows = (await session.scalars(
         select(DetectionApproval).where(DetectionApproval.detection_rule_id == rule.id)
         .order_by(DetectionApproval.created_at.desc()).limit(20)
@@ -242,7 +253,7 @@ async def list_approvals(rule_id: UUID, session: Annotated[AsyncSession, Depends
 
 @router.post("/{rule_id}/approvals", status_code=201)
 async def request_approval(rule_id: UUID, payload: ApprovalRequest, request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
-    rule = await _load(rule_id, session)
+    rule = await _load(rule_id, session, _tenant(request))
     approval = DetectionApproval(
         detection_rule_id=rule.id, requested_by=request.state.principal["email"],
         rule_version=rule.current_version, status="pending",
@@ -251,7 +262,7 @@ async def request_approval(rule_id: UUID, payload: ApprovalRequest, request: Req
     session.add(approval)
     await session.flush()
     session.add(AuditEvent(
-        actor=request.state.principal["email"], tenant_id=request.state.principal["tenant_id"],
+        actor=request.state.principal["email"], tenant_id=rule.tenant_id,
         action="detection.approval_requested", resource_type="detection_approval",
         resource_id=str(approval.id), details={"rule_id": rule.rule_id, "version": rule.current_version},
     ))
@@ -270,6 +281,9 @@ async def review_approval(
     approval = await session.get(DetectionApproval, approval_id)
     if approval is None:
         raise HTTPException(status_code=404, detail="Approval request not found.")
+    approved_rule = await session.get(DetectionRule, approval.detection_rule_id)
+    if approved_rule is None or approved_rule.tenant_id != _tenant(request):
+        raise HTTPException(status_code=404, detail="Approval request not found.")
     principal = request.state.principal
     if approval.requested_by.lower() == principal["email"].lower():
         raise HTTPException(status_code=403, detail="A different human reviewer must decide this request.")
@@ -281,7 +295,7 @@ async def review_approval(
     approval.reviewer = principal["email"]
     approval.decision_note = payload.note
     approval.reviewed_at = datetime.now(UTC)
-    session.add(AuditEvent(actor=principal["email"], tenant_id=principal["tenant_id"],
+    session.add(AuditEvent(actor=principal["email"], tenant_id=approved_rule.tenant_id,
         action="detection.approval_" + payload.decision, resource_type="detection_approval",
         resource_id=str(approval.id), details={"reason": payload.note}))
     await session.commit()
@@ -290,7 +304,7 @@ async def review_approval(
 
 @router.post("/{rule_id}/deploy")
 async def deploy_detection(rule_id: UUID, approval_id: UUID, request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
-    rule = await _load(rule_id, session)
+    rule = await _load(rule_id, session, _tenant(request))
     approval = await session.get(DetectionApproval, approval_id)
     if approval is None or approval.detection_rule_id != rule.id:
         raise HTTPException(status_code=403, detail="A matching approved deployment request is required.")
@@ -301,7 +315,7 @@ async def deploy_detection(rule_id: UUID, approval_id: UUID, request: Request, s
     try:
         payload = build_kibana_payload(
             rule_id=rule.rule_id, title=rule.title, description=rule.description,
-            deployment=rule.deployment or {}, metadata=rule.rule_metadata,
+            deployment=rule.deployment or {}, metadata=rule.rule_metadata, tenant_id=rule.tenant_id,
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=f"Stored deployment is invalid: {exc}") from exc
@@ -311,7 +325,7 @@ async def deploy_detection(rule_id: UUID, approval_id: UUID, request: Request, s
         raise HTTPException(status_code=503, detail="Kibana could not deploy the approved detection.") from exc
     approval.status = "deployed"
     session.add(AuditEvent(actor=request.state.principal["email"],
-        tenant_id=request.state.principal["tenant_id"], action="detection.deployed",
+        tenant_id=rule.tenant_id, action="detection.deployed",
         resource_type="detection_rule", resource_id=str(rule.id),
         details={"approval_id": str(approval.id), "rule_id": rule.rule_id}))
     await session.commit()

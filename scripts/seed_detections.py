@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 from pathlib import Path
@@ -9,44 +10,10 @@ from sqlalchemy import select
 
 from core.database.models import DetectionRule, DetectionRuleVersion
 from core.database.session import SessionFactory, engine
-from detection_engine.compiler.native import compile_native
-from detection_engine.converters.pysigma import compile_sigma
-from detection_engine.validators.sigma import validate_sigma_source
+from detection_engine.library import load_rule, rule_files
 
 ROOT = Path(__file__).resolve().parents[1]
 LIBRARY = ROOT / "detection_rules" / "library"
-
-
-def load_rule(path: Path) -> dict[str, Any]:
-    if path.suffix == ".json":
-        document = json.loads(path.read_text(encoding="utf-8"))
-        result = compile_native(document["format"], document["query"], document.get("index", ["neural-detect-*"]))
-        metadata = document.get("metadata", {})
-        return {
-            "rule_id": document["rule_id"],
-            "title": document["title"],
-            "description": document["description"],
-            "rule_format": document["format"],
-            "source_yaml": None,
-            "native_query": document["query"],
-            "compiled_query": result["compiled_query"],
-            "deployment": result["deployment"],
-            "rule_metadata": metadata,
-        }
-    source = path.read_text(encoding="utf-8")
-    document, stable_id = validate_sigma_source(source)
-    compiled = compile_sigma(source)
-    return {
-        "rule_id": stable_id,
-        "title": document["title"],
-        "description": document["description"],
-        "rule_format": "sigma",
-        "source_yaml": source,
-        "native_query": None,
-        "compiled_query": compiled["compiled_query"],
-        "deployment": compiled["deployment"],
-        "rule_metadata": document,
-    }
 
 
 _COMPARED = ("title", "description", "rule_format", "source_yaml", "native_query", "compiled_query", "deployment", "rule_metadata")
@@ -56,14 +23,13 @@ def _changed(existing: DetectionRule, fields: dict[str, Any]) -> bool:
     return any(getattr(existing, name) != fields[name] for name in _COMPARED)
 
 
-async def main() -> None:
+async def main(tenant: str = "default") -> None:
     created = updated = 0
     async with SessionFactory() as session:
-        for path in sorted(LIBRARY.iterdir()):
-            if path.suffix not in {".json", ".yml", ".yaml"}:
-                continue
+        for path in rule_files(LIBRARY):
             fields = load_rule(path)
-            existing = await session.scalar(select(DetectionRule).where(DetectionRule.rule_id == fields["rule_id"]))
+            existing = await session.scalar(select(DetectionRule).where(
+                DetectionRule.rule_id == fields["rule_id"], DetectionRule.tenant_id == tenant))
             if existing:
                 if _changed(existing, fields):
                     # Git is the source of truth: apply the library change as a new immutable version.
@@ -78,7 +44,7 @@ async def main() -> None:
                     ))
                     updated += 1
                 continue
-            rule = DetectionRule(**fields)
+            rule = DetectionRule(**fields, tenant_id=tenant)
             session.add(rule)
             await session.flush()
             session.add(DetectionRuleVersion(
@@ -89,8 +55,10 @@ async def main() -> None:
             created += 1
         await session.commit()
     await engine.dispose()
-    print(json.dumps({"seeded": created, "updated": updated, "library_path": "detection_rules/library"}))
+    print(json.dumps({"tenant": tenant, "seeded": created, "updated": updated, "library_path": "detection_rules/library"}))
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="Seed the starter detection library into a tenant.")
+    parser.add_argument("--tenant", default="default", help="tenant slug that will own the rules")
+    asyncio.run(main(parser.parse_args().tenant))

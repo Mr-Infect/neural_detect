@@ -16,13 +16,14 @@ from core.database.session import SessionFactory
 router = APIRouter(prefix="/ai/detection", tags=["ai-detection-engineer"])
 
 
-async def _rule_source(source_text: str | None, rule_id: str | None) -> str:
+async def _rule_source(source_text: str | None, rule_id: str | None, tenant_id: str) -> str:
     if source_text:
         return source_text
     if not rule_id:
         raise HTTPException(422, detail="Provide source_text or rule_id.")
     async with SessionFactory() as session:
-        rule = await session.scalar(select(DetectionRule).where(DetectionRule.rule_id == rule_id))
+        rule = await session.scalar(select(DetectionRule).where(
+            DetectionRule.rule_id == rule_id, DetectionRule.tenant_id == tenant_id))
     if not rule or not rule.source_yaml:
         raise HTTPException(404, detail="Sigma source for this rule was not found.")
     return rule.source_yaml
@@ -44,7 +45,7 @@ async def generate(payload: GenerateDetectionRequest) -> dict[str, Any]:
 
 @router.post("/improve")
 async def improve(payload: ImproveDetectionRequest) -> dict[str, Any]:
-    source = await _rule_source(payload.source_text, payload.rule_id)
+    source = await _rule_source(payload.source_text, payload.rule_id, payload.tenant_id)
     try:
         return await agent.submit(
             "improve",
@@ -70,7 +71,7 @@ async def improve(payload: ImproveDetectionRequest) -> dict[str, Any]:
 
 @router.post("/explain")
 async def explain(payload: ExplainDetectionRequest) -> dict[str, Any]:
-    source = await _rule_source(payload.source_text, payload.rule_id)
+    source = await _rule_source(payload.source_text, payload.rule_id, payload.tenant_id)
     try:
         return await agent.submit(
             "explain",

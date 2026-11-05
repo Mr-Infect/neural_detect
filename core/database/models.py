@@ -1,7 +1,17 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -37,8 +47,10 @@ class TelemetrySource(Base):
 
 class DetectionRule(Base):
     __tablename__ = "detection_rules"
+    __table_args__ = (UniqueConstraint("tenant_id", "rule_id", name="uq_detection_rules_tenant_rule"),)
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    rule_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, default="default", server_default="default", index=True)
+    rule_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     rule_format: Mapped[str] = mapped_column(String(20), nullable=False, index=True)

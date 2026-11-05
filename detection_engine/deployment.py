@@ -14,11 +14,13 @@ def kibana_severity(metadata: dict[str, Any]) -> str:
 
 def build_kibana_payload(
     *, rule_id: str, title: str, description: str, deployment: dict[str, Any], metadata: dict[str, Any],
+    tenant_id: str = "default",
 ) -> dict[str, Any]:
     """Single source of truth for the Kibana rule body used by every deploy path."""
     severity = kibana_severity(metadata)
     payload: dict[str, Any] = {
-        "rule_id": rule_id,
+        # Kibana rule IDs are global; namespace non-default tenants so the same Sigma UUID can exist in two tenants.
+        "rule_id": rule_id if tenant_id == "default" else f"{tenant_id}.{rule_id}",
         "name": title,
         "description": description,
         "type": deployment["type"],
@@ -31,7 +33,7 @@ def build_kibana_payload(
         "interval": "5m",
         "from": "now-6m",
         "max_signals": 100,
-        "tags": [tag for tag in metadata.get("tags", []) if isinstance(tag, str)],
+        "tags": [*(tag for tag in metadata.get("tags", []) if isinstance(tag, str)), f"tenant:{tenant_id}"],
     }
     if deployment["type"] == "threshold":
         threshold = deployment.get("threshold")

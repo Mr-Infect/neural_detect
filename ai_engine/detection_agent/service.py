@@ -142,12 +142,14 @@ class DetectionAgent:
         try:
             out = validate_sigma_candidate.invoke({"source": c["sigma_yaml"]})
             v["sigma"] = {"valid": True, "rule_id": out["rule_id"]}
+            tenant = (VOLATILE.get(jid) or {}).get("tenant", "default")
             async with SessionFactory() as db:
                 dup = (
                     await db.scalars(
                         select(DetectionRule).where(
+                            DetectionRule.tenant_id == tenant,
                             (DetectionRule.rule_id == out["rule_id"])
-                            | DetectionRule.title.ilike(out["title"])
+                            | DetectionRule.title.ilike(out["title"]),
                         )
                     )
                 ).all()

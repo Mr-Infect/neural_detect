@@ -9,6 +9,7 @@ COPY core ./core
 COPY integrations ./integrations
 COPY scripts ./scripts
 COPY detection_engine ./detection_engine
+COPY ndctl ./ndctl
 COPY detection_rules ./detection_rules
 RUN pip install --no-cache-dir -r requirements.lock && pip install --no-cache-dir --no-deps . && addgroup --system app && adduser --system --ingroup app app && chown -R app:app /app
 USER app

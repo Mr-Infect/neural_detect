@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added `ndctl`, a command line for detection-as-code: `validate`, `test`, `plan`, `apply`, `status`, `request-approval`, and `deploy` (see `docs/CLI.md`). CI now runs it.
+- Detection rules are now scoped to a tenant. A rule ID is unique per tenant, rules and approvals from another tenant return 404, and administrators can act on another tenant with `?tenant_id=`. Migration `0011_detection_tenancy` assigns existing rules to the `default` tenant.
+- Kibana rule IDs for non-default tenants are prefixed with the tenant slug, and every deployed rule is tagged `tenant:<slug>`.
+- `scripts/seed_detections.py` accepts `--tenant`; the rule loader is shared in `detection_engine/library.py`.
 - Fixed Kibana rule deployment: Kibana now receives a generated encryption key (`ND_KIBANA_ENCRYPTION_KEY`, created by `scripts/setup.sh`).
 - Deploy payloads are built in one place, include threshold settings, and map Sigma severities to Kibana's.
 - Community Sigma field names (Image, CommandLine, ...) are mapped to ECS when compiling.

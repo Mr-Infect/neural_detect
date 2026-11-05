@@ -30,10 +30,10 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: python -m pip install -r requirements.lock -e ".[dev]"
-      - run: ruff check apps ai_engine ai_security core detection_engine integrations scripts tests
+      - run: ruff check apps ai_engine ai_security core detection_engine integrations ndctl scripts tests
       - run: pytest -q
-      - run: python -m scripts.validate_detections
-      - run: python -m scripts.validate_detections --live
+      - run: python -m ndctl validate
+      - run: python -m ndctl test
         env:
           ND_ELASTICSEARCH_URL: http://localhost:9200
           ND_ELASTICSEARCH_VERIFY_CERTS: "false"
