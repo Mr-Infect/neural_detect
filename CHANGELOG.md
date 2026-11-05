@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added `ndctl import` (community Sigma rules such as SigmaHQ, with filters, ECS-field safety checks, and generated fixtures for simple rules) and `ndctl coverage` (ATT&CK tactic and technique coverage, optionally against MITRE's official bundle).
+- Matching is now case-insensitive for process, user, host, file, registry, and DNS fields (lowercase normalizer in the ECS index template). Previously `CertUtil.exe` or `-URLCache` evaded rules written in lowercase. Applies to newly created indices.
+- More Sysmon-style field names map to ECS (`Description`, `Product`, `Company`, `FileVersion` map to `process.pe.*`).
+- Fixture placeholders named `TODO...` now fail `ndctl validate`.
 - Added `ndctl`, a command line for detection-as-code: `validate`, `test`, `plan`, `apply`, `status`, `request-approval`, and `deploy` (see `docs/CLI.md`). CI now runs it.
 - Detection rules are now scoped to a tenant. A rule ID is unique per tenant, rules and approvals from another tenant return 404, and administrators can act on another tenant with `?tenant_id=`. Migration `0011_detection_tenancy` assigns existing rules to the `default` tenant.
 - Kibana rule IDs for non-default tenants are prefixed with the tenant slug, and every deployed rule is tagged `tenant:<slug>`.

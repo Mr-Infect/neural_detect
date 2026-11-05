@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from detection_engine import attack, sigma_import
 from detection_engine.library import LibraryRule, load_library
 from ndctl.client import ApiError, Client
 from ndctl.plan import Change, make_plan, update_payload
@@ -105,6 +106,78 @@ def cmd_test(args: argparse.Namespace) -> int:
         print("\nFixture failures:\n  " + "\n  ".join(failures))
         return 1
     print(f"\nAll {len(rules)} rules passed their fixtures.")
+    return 0
+
+
+def cmd_coverage(args: argparse.Namespace) -> int:
+    rules = _load(args)
+    usable = [r for r in rules if r.fields]
+    bundle = attack.load_bundle(Path(args.attack_bundle)) if args.attack_bundle else None
+    pairs = [(r.title, [str(t) for t in r.fields["rule_metadata"].get("tags", [])]) for r in usable]
+    report = attack.build_coverage(pairs, bundle)
+    if args.format == "json":
+        print(json.dumps(report, indent=2))
+    elif args.format == "markdown":
+        print(attack.render_markdown(report, bool(bundle)))
+    else:
+        print(attack.render_text(report, args.path, bool(bundle)))
+    return 0
+
+
+def _existing_ids(dest: Path) -> set[str]:
+    import yaml
+
+    ids: set[str] = set()
+    for path in (dest / "library").glob("*.y*ml") if (dest / "library").is_dir() else []:
+        try:
+            document = yaml.safe_load(path.read_text(encoding="utf-8"))
+            ids.add(str(document["id"]).lower())
+        except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError):
+            continue
+    return ids
+
+
+def _split(value: str | None) -> set[str]:
+    return {item.strip().lower() for item in (value or "").split(",") if item.strip()}
+
+
+def cmd_import(args: argparse.Namespace) -> int:
+    source, dest = Path(args.source), Path(args.dest)
+    if not source.exists():
+        raise SystemExit(f"Source not found: {source}")
+    statuses = _split(args.status)
+    filters = sigma_import.Filters(
+        product=args.product, category=args.category, service=args.service, levels=_split(args.level),
+        statuses=set() if "any" in statuses else (statuses or set(sigma_import.DEFAULT_STATUSES)),
+        tag_prefixes=args.tag or [], allow_unmapped=args.allow_unmapped, generated_only=args.generated_only,
+        limit=args.limit,
+    )
+    results = sigma_import.scan(source, filters, _existing_ids(dest))
+    imported = [r for r in results if r.outcome == "imported"]
+    skipped = [r for r in results if r.outcome == "skipped"]
+    filtered = [r for r in results if r.outcome == "filtered"]
+    reasons: dict[str, int] = {}
+    for result in skipped:
+        reasons[result.reason.split(":")[0]] = reasons.get(result.reason.split(":")[0], 0) + 1
+    needs_work = sum(not r.synthesized for r in imported)
+    print(f"Scanned {len(results)} files in {source}")
+    print(f"  imported : {len(imported)}  ({len(imported) - needs_work} with generated fixtures, "
+          f"{needs_work} need fixtures you write)")
+    print(f"  skipped  : {len(skipped)}")
+    for reason, count in sorted(reasons.items(), key=lambda item: -item[1]):
+        print(f"      {count:>5}  {reason}")
+    print(f"  filtered out by your options: {len(filtered)}")
+    if args.verbose:
+        for result in skipped[:80]:
+            print(f"    skip {result.path.name}: {result.reason}")
+    if args.dry_run:
+        print("\nDry run: nothing was written.")
+        return 0
+    written = sigma_import.write(results, dest)
+    print(f"\nWrote {len(written)} rules to {dest}/library with fixtures in {dest}/fixtures.")
+    print("Next: ndctl validate, then ndctl test. Generated fixtures are a starting point; review them.")
+    if needs_work:
+        print(f"{needs_work} rules have placeholder fixtures (TODO-...) and will fail validate until you fill them in.")
     return 0
 
 
@@ -232,6 +305,26 @@ def build_parser() -> argparse.ArgumentParser:
     login.add_argument("--email")
     login.add_argument("--password-stdin", action="store_true", help="read the password from standard input")
     login.set_defaults(run=cmd_login)
+    coverage = sub.add_parser("coverage", help="show which ATT&CK tactics and techniques your rules cover")
+    coverage.add_argument("--attack-bundle", help="MITRE ATT&CK enterprise STIX JSON, for percentages and gaps")
+    coverage.add_argument("--format", choices=["text", "json", "markdown"], default="text")
+    coverage.set_defaults(run=cmd_coverage)
+    imp = sub.add_parser("import", help="import community Sigma rules (for example a SigmaHQ checkout)")
+    imp.add_argument("source", help="a Sigma rule file or a directory of rules")
+    imp.add_argument("--dest", default="detection_rules", help="rules directory to write into (default: detection_rules)")
+    imp.add_argument("--product", help="logsource product, for example windows")
+    imp.add_argument("--category", help="logsource category, for example process_creation")
+    imp.add_argument("--service", help="logsource service")
+    imp.add_argument("--level", help="comma-separated levels, for example high,critical")
+    imp.add_argument("--status", help="comma-separated statuses (default: stable,test; use 'any' for all)")
+    imp.add_argument("--tag", action="append", help="keep rules with a tag starting with this, for example attack.t1059")
+    imp.add_argument("--limit", type=int, help="import at most this many rules")
+    imp.add_argument("--allow-unmapped", action="store_true", help="also import rules with fields that do not map to ECS")
+    imp.add_argument("--generated-only", action="store_true",
+                     help="only import rules whose tests can be generated automatically")
+    imp.add_argument("--dry-run", action="store_true")
+    imp.add_argument("-v", "--verbose", action="store_true", help="list skipped files and reasons")
+    imp.set_defaults(run=cmd_import)
     sub.add_parser("plan", help="show what apply would change").set_defaults(run=cmd_plan)
     apply = sub.add_parser("apply", help="create or update rules on the server (never deploys)")
     apply.add_argument("--dry-run", action="store_true")
@@ -245,8 +338,8 @@ def build_parser() -> argparse.ArgumentParser:
     deploy.add_argument("--approval", required=True, help="approval ID that was approved")
     deploy.set_defaults(run=cmd_deploy)
     for name, child in sub.choices.items():
-        _common(child, rules=name in {"validate", "test", "plan", "apply"},
-                server=name not in {"validate", "test", "login"})
+        _common(child, rules=name in {"validate", "test", "plan", "apply", "coverage"},
+                server=name not in {"validate", "test", "login", "coverage", "import"})
     return parser
 
 

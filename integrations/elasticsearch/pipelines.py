@@ -31,12 +31,21 @@ async def install_ingest_pipelines() -> list[str]:
         installed.append(f"neural-detect-{name}")
     return installed
 
+# Windows paths, command lines and names vary in case in real telemetry, and Sigma matches case-insensitively.
+# A lowercase normalizer makes keyword matching (including wildcards) case-insensitive at index and query time.
+_CI = {"type": "keyword", "normalizer": "nd_lowercase"}
+_CI_LONG = {"type": "keyword", "normalizer": "nd_lowercase", "ignore_above": 8191}
+
+
 async def install_ecs_index_template() -> str:
     template = {
         "index_patterns": ["neural-detect-*"],
         "priority": 500,
         "template": {
-            "settings": {"number_of_shards": 1},
+            "settings": {
+                "number_of_shards": 1,
+                "analysis": {"normalizer": {"nd_lowercase": {"type": "custom", "filter": ["lowercase"]}}},
+            },
             "mappings": {
                 "dynamic": True,
                 "properties": {
@@ -48,19 +57,26 @@ async def install_ecs_index_template() -> str:
                         "action": {"type": "keyword"}, "module": {"type": "keyword"},
                         "dataset": {"type": "keyword"}, "original": {"type": "match_only_text"},
                     }},
-                    "host": {"properties": {"name": {"type": "keyword"}, "id": {"type": "keyword"}, "ip": {"type": "ip"}}},
-                    "user": {"properties": {"name": {"type": "keyword"}, "id": {"type": "keyword"}}},
+                    "host": {"properties": {"name": _CI, "id": {"type": "keyword"}, "ip": {"type": "ip"}}},
+                    "user": {"properties": {"name": _CI, "id": {"type": "keyword"}}},
                     "process": {"properties": {
-                        "name": {"type": "keyword"}, "executable": {"type": "keyword"},
-                        "pid": {"type": "long"}, "command_line": {"type": "wildcard"},
+                        "name": _CI, "executable": _CI, "pid": {"type": "long"}, "command_line": _CI_LONG,
+                        "working_directory": _CI,
+                        "parent": {"properties": {"name": _CI, "executable": _CI, "command_line": _CI_LONG}},
+                        "pe": {"properties": {
+                            "original_file_name": _CI, "description": _CI, "product": _CI,
+                            "company": _CI, "file_version": _CI,
+                        }},
                     }},
-                    "source": {"properties": {"ip": {"type": "ip"}, "port": {"type": "integer"}, "domain": {"type": "keyword"}}},
-                    "destination": {"properties": {"ip": {"type": "ip"}, "port": {"type": "integer"}, "domain": {"type": "keyword"}}},
+                    "file": {"properties": {"name": _CI, "path": _CI}},
+                    "registry": {"properties": {"path": _CI, "key": _CI}},
+                    "source": {"properties": {"ip": {"type": "ip"}, "port": {"type": "integer"}, "domain": _CI}},
+                    "destination": {"properties": {"ip": {"type": "ip"}, "port": {"type": "integer"}, "domain": _CI}},
                     "network": {"properties": {
                         "protocol": {"type": "keyword"}, "transport": {"type": "keyword"},
                         "direction": {"type": "keyword"}, "bytes": {"type": "long"}, "packets": {"type": "long"},
                     }},
-                    "dns": {"properties": {"question": {"properties": {"name": {"type": "keyword"}, "type": {"type": "keyword"}}}}},
+                    "dns": {"properties": {"question": {"properties": {"name": _CI, "type": {"type": "keyword"}}}}},
                     "rule": {"properties": {
                         "id": {"type": "keyword"}, "name": {"type": "keyword"},
                         "severity": {"type": "keyword"}, "risk_score": {"type": "integer"},

@@ -88,6 +88,8 @@ def check_fixtures(fixtures: Any) -> list[str]:
             continue
         for index, case in enumerate(cases):
             name = str(case.get("name") or f"{group}-{index}") if isinstance(case, dict) else ""
+            if name.upper().startswith("TODO"):
+                problems.append(f"fixture case '{name}' is a placeholder; write a real event")
             if not isinstance(case, dict) or not isinstance(case.get("events"), list) or not case["events"]:
                 problems.append(f"{group}[{index}] needs a non-empty 'events' list")
             elif name in names:

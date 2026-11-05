@@ -36,6 +36,10 @@ Use only synthetic lab events. The alert appears in Kibana under **Security → 
 
 Keep rules and fixtures in a repository and let CI run `ndctl validate` and `ndctl test` on every change. `ndctl plan` shows what would change on the server and `ndctl apply` stores it; approval and deployment still follow the steps above. See [docs/CLI.md](docs/CLI.md).
 
+## Growing the library
+
+`ndctl import` brings in community Sigma rules and `ndctl coverage` shows which ATT&CK techniques you cover. Imported rules go through the same validation, fixture tests, approval, and deployment as any other rule. See [docs/CLI.md](docs/CLI.md).
+
 ## Tenants
 
 Each rule belongs to one tenant. Users only see and change their own tenant's rules, the same Sigma ID can exist in two tenants, and Kibana rules for a non-default tenant are named `<tenant>.<rule id>` and tagged `tenant:<tenant>`.

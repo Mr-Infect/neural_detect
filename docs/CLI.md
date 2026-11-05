@@ -36,6 +36,8 @@ Pass another directory as an argument, and `--fixtures DIR` if your fixtures liv
 |---|---|---|
 | `ndctl validate [DIR]` | nothing | Checks every rule compiles and has well-formed positive and negative fixtures. Exit code 1 on any problem. |
 | `ndctl test [DIR]` | Elasticsearch | Runs `validate`, then executes every fixture against a throwaway index using the ECS mapping. Uses `ND_ELASTICSEARCH_URL` and credentials from the environment. |
+| `ndctl coverage [DIR]` | nothing | Shows which ATT&CK tactics and techniques your rules cover. Add `--attack-bundle FILE` (MITRE's enterprise STIX JSON) for percentages and gaps, and `--format json` or `markdown` for CI or a README. |
+| `ndctl import SOURCE` | nothing | Imports community Sigma rules into your rules directory. See below. |
 | `ndctl login` | API | Signs in and saves a token to `~/.config/ndctl/config.json` (mode 0600). |
 | `ndctl plan [DIR]` | API | Shows what `apply` would create or update, like a Terraform plan. |
 | `ndctl apply [DIR] [--dry-run]` | API | Creates new rules and updates changed ones. Stored rules are not live. Never deletes. |
@@ -44,6 +46,35 @@ Pass another directory as an argument, and `--fixtures DIR` if your fixtures liv
 | `ndctl deploy RULE_ID --approval ID` | API | Deploys using an approval a different person has approved. |
 
 Rules belong to your tenant. Administrators can act on another tenant with `--tenant SLUG`.
+
+## Importing community rules
+
+```bash
+git clone --depth 1 https://github.com/SigmaHQ/sigma.git ~/sigma
+ndctl import ~/sigma/rules/windows/process_creation --dry-run     # preview, writes nothing
+ndctl import ~/sigma/rules/windows/process_creation --generated-only --level high,critical
+ndctl validate && ndctl test
+```
+
+`import` keeps each rule file byte-for-byte and writes it to `detection_rules/library/` with a fixtures file in `detection_rules/fixtures/`. It is deliberately picky, because a rule that compiles but can never match your data is worse than no rule:
+
+- **Skipped, with the reason shown:** correlation rules, files with several rules, rules without an ATT&CK technique tag, rules that do not compile, and rules whose field names cannot be translated to ECS (for example `EventID`, `Hashes`, `IntegrityLevel`). Use `-v` to list them. `--allow-unmapped` overrides the last check, at your own risk.
+- **Filters:** `--product`, `--category`, `--service`, `--level`, `--status` (default `stable,test`; `any` for all), `--tag` (repeatable), `--limit`.
+- **Fixtures:** for simple rules (all conditions ANDed, no regex or negation) it generates one event that must alert and one that must not, from the rule's own conditions. Review them and add realistic cases. For complex rules it writes a placeholder named `TODO-positive`, and `ndctl validate` fails until you replace it, so an unfinished import cannot pass CI. `--generated-only` imports only rules whose fixtures could be generated.
+- **Already imported rules** (same rule ID) are skipped, and an existing file is never overwritten.
+
+Matching is case-insensitive for the process, user, host, file, registry and DNS fields, because the shared ECS index template uses a lowercase normalizer on them. This matters: community rules assume case-insensitive matching and real telemetry mixes case (`CertUtil.exe`, `-URLCache`). The template applies to indices created after it is installed (`./scripts/setup.sh` or `ndctl test` installs it); existing daily indices keep their old mapping. Aggregations on those fields show lowercase values, while the stored event is unchanged.
+
+## ATT&CK coverage
+
+```bash
+ndctl coverage                                    # tactics and techniques your rules cover
+curl -LO https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json
+ndctl coverage --attack-bundle enterprise-attack.json    # adds percentages and gaps per tactic
+ndctl coverage --format markdown                  # a table you can paste into a PR or README
+```
+
+Sub-techniques count toward their parent technique. Without the bundle, a technique is credited to the tactics tagged on the same rule.
 
 ## Signing in from CI
 
