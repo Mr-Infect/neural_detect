@@ -15,6 +15,7 @@ from core.database.models import AuditEvent, DetectionApproval, DetectionRule, D
 from core.database.session import get_session
 from detection_engine.compiler.native import compile_native
 from detection_engine.converters.pysigma import compile_sigma
+from detection_engine.deployment import build_kibana_payload
 from detection_engine.testing.runner import run_fixture_tests
 from detection_engine.validators.sigma import validate_sigma_source
 from integrations.elasticsearch.detection_api import create_detection_rule
@@ -281,22 +282,13 @@ async def deploy_detection(rule_id: UUID, approval_id: UUID, request: Request, s
         raise HTTPException(status_code=403, detail="A non-expired approved deployment request is required.")
     if approval.rule_version != rule.current_version:
         raise HTTPException(status_code=409, detail="Approval was issued for an older rule version; request a new approval.")
-    payload = {
-        "rule_id": rule.rule_id,
-        "name": rule.title,
-        "description": rule.description,
-        "type": rule.deployment["type"],
-        "language": rule.deployment["language"],
-        "index": rule.deployment["index"],
-        "query": rule.deployment["query"],
-        "enabled": True,
-        "severity": rule.rule_metadata.get("level", rule.rule_metadata.get("severity", "medium")),
-        "risk_score": rule.rule_metadata.get("risk_score", 47),
-        "interval": "5m",
-        "from": "now-6m",
-        "max_signals": 100,
-        "tags": rule.rule_metadata.get("tags", []),
-    }
+    try:
+        payload = build_kibana_payload(
+            rule_id=rule.rule_id, title=rule.title, description=rule.description,
+            deployment=rule.deployment or {}, metadata=rule.rule_metadata,
+        )
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"Stored deployment is invalid: {exc}") from exc
     try:
         deployed = await create_detection_rule(payload)
     except httpx.HTTPError as exc:

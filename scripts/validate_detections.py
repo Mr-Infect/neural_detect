@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 from detection_engine.compiler.native import compile_native
@@ -12,7 +13,18 @@ LIBRARY = ROOT / "detection_rules" / "library"
 FIXTURES = ROOT / "detection_rules" / "fixtures"
 
 
+def _run_live(rule_format: str, compiled: object, fixtures: dict, name: str) -> None:
+    import asyncio
+
+    from detection_engine.testing.runner import run_fixture_tests
+
+    outcome = asyncio.run(run_fixture_tests(rule_format, compiled, fixtures))
+    if not outcome["passed"]:
+        raise SystemExit(f"{name}: fixture failures: {', '.join(outcome['failures'])}")
+
+
 def main() -> None:
+    live = "--live" in sys.argv  # execute fixtures against a disposable Elasticsearch (ELASTICSEARCH_URL)
     validated = 0
     for path in sorted(LIBRARY.iterdir()):
         if path.suffix == ".json":
@@ -34,9 +46,11 @@ def main() -> None:
         fixtures = json.loads(fixture_path.read_text(encoding="utf-8"))
         if not fixtures.get("positive") or not fixtures.get("negative"):
             raise SystemExit(f"{fixture_path.name}: positive and negative cases are required")
+        if live:
+            _run_live(rule["format"] if path.suffix == ".json" else "sigma", result["compiled_query"], fixtures, path.name)
         validated += 1
-    if validated != 10:
-        raise SystemExit(f"Expected 10 initial detections; found {validated}")
+    if validated == 0:
+        raise SystemExit("No detections found in detection_rules/library")
     print(f"Validated and compiled {validated} detections with positive/negative fixtures.")
 
 

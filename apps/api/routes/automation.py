@@ -9,6 +9,7 @@ from sqlalchemy import desc, select
 from core.config.settings import get_settings
 from core.database.models import ApprovalRequest, AuditEvent, DetectionRule
 from core.database.session import SessionFactory
+from detection_engine.deployment import build_kibana_payload
 from integrations.elasticsearch.detection_api import create_detection_rule
 from integrations.soar.provider import soar_provider
 
@@ -181,16 +182,13 @@ async def execute_approved_action(approval_id: UUID, request: Request) -> dict:
                 raise HTTPException(status_code=404, detail="The approved detection rule no longer exists.")
             if row.payload.get("version") != rule.current_version:
                 raise HTTPException(status_code=409, detail="The detection changed after approval; request a fresh approval.")
-            deployment = rule.deployment or {}
-            dispatch_payload = {
-                "rule_id": rule.rule_id, "name": rule.title, "description": rule.description,
-                "type": deployment.get("type"), "language": deployment.get("language"),
-                "index": deployment.get("index", ["neural-detect-*"]),
-                "query": deployment.get("query"), "enabled": True,
-                "severity": rule.rule_metadata.get("level", rule.rule_metadata.get("severity", "medium")),
-                "risk_score": rule.rule_metadata.get("risk_score", 47), "interval": "5m",
-                "from": "now-6m", "max_signals": 100, "tags": rule.rule_metadata.get("tags", []),
-            }
+            try:
+                dispatch_payload = build_kibana_payload(
+                    rule_id=rule.rule_id, title=rule.title, description=rule.description,
+                    deployment=rule.deployment or {}, metadata=rule.rule_metadata,
+                )
+            except (KeyError, ValueError) as exc:
+                raise HTTPException(status_code=422, detail=f"Stored deployment is invalid: {exc}") from exc
             try:
                 result = {"accepted": True, "status": "deployed", "deployment": await create_detection_rule(dispatch_payload)}
             except Exception as exc:

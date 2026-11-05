@@ -53,10 +53,10 @@ def test_rejects_native_indices_outside_platform_namespace() -> None:
         compile_native("kql", "event.category:process", ["logs-*"])
 
 
-def test_all_initial_rules_have_positive_and_negative_fixtures() -> None:
+def test_all_rules_have_positive_and_negative_fixtures() -> None:
     fixture_dir = ROOT / "detection_rules" / "fixtures"
     rule_files = list(LIBRARY.glob("*.yml")) + list(LIBRARY.glob("*.json"))
-    assert len(rule_files) == 10
+    assert rule_files
     for rule in rule_files:
         fixtures = json.loads((fixture_dir / f"{rule.stem}.json").read_text(encoding="utf-8"))
         assert fixtures["positive"]

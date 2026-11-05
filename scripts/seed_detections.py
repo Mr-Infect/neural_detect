@@ -49,8 +49,15 @@ def load_rule(path: Path) -> dict[str, Any]:
     }
 
 
+_COMPARED = ("title", "description", "rule_format", "source_yaml", "native_query", "compiled_query", "deployment", "rule_metadata")
+
+
+def _changed(existing: DetectionRule, fields: dict[str, Any]) -> bool:
+    return any(getattr(existing, name) != fields[name] for name in _COMPARED)
+
+
 async def main() -> None:
-    created = 0
+    created = updated = 0
     async with SessionFactory() as session:
         for path in sorted(LIBRARY.iterdir()):
             if path.suffix not in {".json", ".yml", ".yaml"}:
@@ -58,6 +65,18 @@ async def main() -> None:
             fields = load_rule(path)
             existing = await session.scalar(select(DetectionRule).where(DetectionRule.rule_id == fields["rule_id"]))
             if existing:
+                if _changed(existing, fields):
+                    # Git is the source of truth: apply the library change as a new immutable version.
+                    for name, value in fields.items():
+                        setattr(existing, name, value)
+                    existing.current_version += 1
+                    session.add(DetectionRuleVersion(
+                        detection_rule_id=existing.id, version=existing.current_version,
+                        source_yaml=existing.source_yaml, native_query=existing.native_query,
+                        compiled_query=existing.compiled_query, deployment=existing.deployment,
+                        rule_metadata=existing.rule_metadata,
+                    ))
+                    updated += 1
                 continue
             rule = DetectionRule(**fields)
             session.add(rule)
@@ -70,7 +89,7 @@ async def main() -> None:
             created += 1
         await session.commit()
     await engine.dispose()
-    print(json.dumps({"seeded": created, "library_path": "detection_rules/library"}))
+    print(json.dumps({"seeded": created, "updated": updated, "library_path": "detection_rules/library"}))
 
 
 if __name__ == "__main__":

@@ -17,10 +17,15 @@ async def run_fixture_tests(
     if not isinstance(positive, list) or not isinstance(negative, list) or not positive or not negative:
         raise ValueError("Fixtures require non-empty positive and negative lists.")
     groups = [(item, True) for item in positive] + [(item, False) for item in negative]
+    names: list[str] = []
     documents: list[dict[str, Any]] = []
     for position, (fixture, expected) in enumerate(groups):
         if not isinstance(fixture, dict) or not isinstance(fixture.get("events"), list) or not fixture["events"]:
             raise ValueError("Each fixture case must contain a non-empty events list.")
+        name = str(fixture.get("name") or f"case-{position}")
+        if name in names:
+            raise ValueError(f"Fixture case names must be unique; '{name}' is repeated.")
+        names.append(name)
         if len(fixture["events"]) > 100:
             raise ValueError("Each fixture case may contain at most 100 events.")
         for event in fixture["events"]:
@@ -29,7 +34,7 @@ async def run_fixture_tests(
             documents.append({
                 **event,
                 "@timestamp": event.get("@timestamp", f"2026-01-01T00:{position:02d}:00Z"),
-                "nd_test": {"fixture": str(fixture.get("name", position)), "expected": expected},
+                "nd_test": {"fixture": name, "expected": expected},
             })
     client = get_client()
     index = validate_index(f"neural-detect-rule-tests-{uuid4().hex}")
@@ -85,8 +90,7 @@ async def run_fixture_tests(
         await client.options(ignore_status=404).indices.delete(index=index)
     cases = []
     failures = []
-    for fixture, expected in groups:
-        name = str(fixture.get("name", "unnamed"))
+    for name, (_, expected) in zip(names, groups, strict=True):
         detected = name in matched
         passed = detected is expected
         cases.append({"name": name, "expected_detection": expected, "detected": detected, "passed": passed})
