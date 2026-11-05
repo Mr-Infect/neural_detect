@@ -12,6 +12,8 @@ services:
     profiles: [disabled-in-production]
     restart: unless-stopped
     ports: !reset []
+  elasticsearch-setup:
+    profiles: [disabled-in-production]
   kibana:
     profiles: [disabled-in-production]
     restart: unless-stopped

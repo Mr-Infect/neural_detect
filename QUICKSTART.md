@@ -16,7 +16,12 @@ From WSL, change to the repository and run:
 
 The script creates a mode-0600 ignored `.env` when absent, generates database/application/admin secrets, builds the development images, waits for dependencies, applies Alembic migrations, prepares Elasticsearch, and seeds the versioned starter rule library. The bootstrap administrator is `admin@neural-detect.local`; retrieve the generated password locally with `grep '^ND_BOOTSTRAP_ADMIN_PASSWORD=' .env` and never paste it into logs or source control.
 
-Open `http://localhost:5173`, sign in, and verify:
+Open `http://localhost:5173`, sign in, and verify. Kibana is at `http://localhost:5601`: sign in as `elastic` with `ND_ELASTIC_PASSWORD` from `.env`. Elasticsearch security is enabled in the development stack because Kibana's detection engine needs it to show and run rules. Do not use the internal `kibana_system` account to sign in.
+
+```bash
+grep '^ND_ELASTIC_PASSWORD=' .env
+```
+
 
 ```bash
 curl -fsS http://localhost:8001/api/v1/health

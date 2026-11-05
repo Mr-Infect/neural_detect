@@ -66,13 +66,24 @@ if ! grep -q '^ND_KIBANA_ENCRYPTION_KEY=' .env || grep -q '^ND_KIBANA_ENCRYPTION
     printf 'ND_KIBANA_ENCRYPTION_KEY=%s\n' "$KIBANA_KEY" >> .env
   fi
 fi
+set_env() {
+  if grep -q "^$1=" .env; then sed -i "s#^$1=.*#$1=$2#" .env; else printf '%s=%s\n' "$1" "$2" >> .env; fi
+}
+for key in ND_ELASTIC_PASSWORD ND_KIBANA_SYSTEM_PASSWORD; do
+  if ! grep -q "^$key=." .env || grep -q "^$key=generate-with-openssl-rand-hex-32$" .env; then
+    set_env "$key" "$(openssl rand -hex 32)"
+  fi
+done
+ES_PASSWORD="$(grep '^ND_ELASTIC_PASSWORD=' .env | cut -d= -f2-)"
+set_env ND_ELASTICSEARCH_USERNAME elastic
+set_env ND_ELASTICSEARCH_PASSWORD "$ES_PASSWORD"
 for entry in 'ND_OPA_URL=http://opa:8181' 'ND_SOAR_WEBHOOK_URL=' 'ND_SOAR_WEBHOOK_TOKEN='; do
   key="${entry%%=*}"
   grep -q "^$key=" .env || printf '%s\n' "$entry" >> .env
 done
 chmod 600 .env
 
-if grep -Eq '^(POSTGRES_PASSWORD|ND_SECRET_KEY|ND_BOOTSTRAP_ADMIN_PASSWORD|ND_KIBANA_ENCRYPTION_KEY)=((replace-me)|(replace-with-a-random-secret-before-deployment)|(generate-a-random-32-byte-secret)|(generate-with-openssl-rand-hex-32))$' .env; then
+if grep -Eq '^(POSTGRES_PASSWORD|ND_SECRET_KEY|ND_BOOTSTRAP_ADMIN_PASSWORD|ND_KIBANA_ENCRYPTION_KEY|ND_ELASTIC_PASSWORD|ND_KIBANA_SYSTEM_PASSWORD|ND_ELASTICSEARCH_PASSWORD)=((replace-me)|(replace-with-a-random-secret-before-deployment)|(generate-a-random-32-byte-secret)|(generate-with-openssl-rand-hex-32))$' .env; then
   echo ".env still contains example secrets. Replace them before setup." >&2
   exit 1
 fi
@@ -89,9 +100,9 @@ fi
 docker compose up -d --build --wait --wait-timeout 300
 
 wait_for_url() {
-  local url="$1" attempt
+  local url="$1" auth="${2:-}" attempt
   for attempt in $(seq 1 90); do
-    if curl -fsS "$url" >/dev/null; then return 0; fi
+    if curl -fsS ${auth:+-u "$auth"} "$url" >/dev/null; then return 0; fi
     sleep 2
   done
   echo "Timed out waiting for $url" >&2
@@ -99,7 +110,7 @@ wait_for_url() {
 }
 
 wait_for_url http://127.0.0.1:8181/health
-wait_for_url http://127.0.0.1:9200/
+wait_for_url http://127.0.0.1:9200/ "elastic:$ES_PASSWORD"
 wait_for_url http://127.0.0.1:8001/api/v1/health
 
 docker compose run --rm --no-deps api alembic upgrade head
@@ -117,6 +128,6 @@ echo
 echo "NEURAL DETECT is ready:"
 echo "  Frontend:  http://localhost:5173"
 echo "  API docs:  http://localhost:8001/docs"
-echo "  Kibana:    http://localhost:5601"
+echo "  Kibana:    http://localhost:5601 (sign in as elastic; password is ND_ELASTIC_PASSWORD in ignored .env)"
 echo "  Login:     admin@neural-detect.local (password is stored in ignored .env)"
 docker compose ps

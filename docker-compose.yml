@@ -19,22 +19,55 @@ services:
     ports: ["6333:6333"]
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.17.1
-    environment: {discovery.type: single-node, xpack.security.enabled: "false", ES_JAVA_OPTS: "-Xms1g -Xmx1g"}
+    environment:
+      discovery.type: single-node
+      # Security must be on: Kibana's detection engine needs it to show and run rules.
+      xpack.security.enabled: "true"
+      ELASTIC_PASSWORD: ${ND_ELASTIC_PASSWORD:?Run ./scripts/setup.sh to generate ND_ELASTIC_PASSWORD}
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
     volumes: [elasticsearch_data:/usr/share/elasticsearch/data]
     ports: ["9200:9200"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u elastic:$$ELASTIC_PASSWORD http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+  elasticsearch-setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.1
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      ELASTIC_PASSWORD: ${ND_ELASTIC_PASSWORD}
+      KIBANA_SYSTEM_PASSWORD: ${ND_KIBANA_SYSTEM_PASSWORD:?Run ./scripts/setup.sh to generate ND_KIBANA_SYSTEM_PASSWORD}
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >-
+        curl -fsS -u "elastic:$$ELASTIC_PASSWORD" -X POST -H "Content-Type: application/json"
+        http://elasticsearch:9200/_security/user/kibana_system/_password
+        -d "{\"password\":\"$$KIBANA_SYSTEM_PASSWORD\"}"
   kibana:
     image: docker.elastic.co/kibana/kibana:8.17.1
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: ${ND_KIBANA_SYSTEM_PASSWORD}
       # Kibana refuses to create detection rules without these keys. Generated into .env by scripts/setup.sh.
       XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${ND_KIBANA_ENCRYPTION_KEY:?Run ./scripts/setup.sh to generate ND_KIBANA_ENCRYPTION_KEY}
       XPACK_SECURITY_ENCRYPTIONKEY: ${ND_KIBANA_ENCRYPTION_KEY}
       XPACK_REPORTING_ENCRYPTIONKEY: ${ND_KIBANA_ENCRYPTION_KEY}
-    depends_on: [elasticsearch]
+    depends_on:
+      elasticsearch-setup:
+        condition: service_completed_successfully
     ports: ["5601:5601"]
   logstash:
     image: docker.elastic.co/logstash/logstash:8.17.1
-    depends_on: [elasticsearch]
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      ND_ELASTIC_PASSWORD: ${ND_ELASTIC_PASSWORD}
     volumes: ["./infrastructure/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro"]
     ports: ["5044:5044","9600:9600"]
   opa:
