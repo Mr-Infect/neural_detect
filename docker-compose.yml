@@ -24,7 +24,12 @@ services:
     ports: ["9200:9200"]
   kibana:
     image: docker.elastic.co/kibana/kibana:8.17.1
-    environment: {ELASTICSEARCH_HOSTS: http://elasticsearch:9200}
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      # Kibana refuses to create detection rules without these keys. Generated into .env by scripts/setup.sh.
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${ND_KIBANA_ENCRYPTION_KEY:?Run ./scripts/setup.sh to generate ND_KIBANA_ENCRYPTION_KEY}
+      XPACK_SECURITY_ENCRYPTIONKEY: ${ND_KIBANA_ENCRYPTION_KEY}
+      XPACK_REPORTING_ENCRYPTIONKEY: ${ND_KIBANA_ENCRYPTION_KEY}
     depends_on: [elasticsearch]
     ports: ["5601:5601"]
   logstash:

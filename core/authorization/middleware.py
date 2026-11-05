@@ -18,7 +18,7 @@ def _category(method:str,path:str)->str:
     if path.startswith("/api/v1/auth/"):
         return "admin" if any(x in path for x in ("/users","/roles","/tenants","/integrations","/audit")) else "read"
     if "/approvals/" in path and path.endswith("/review"): return "approval_review"
-    if path.startswith("/api/v1/detections/") and path.endswith("/approvals"): return "approval_request"
+    if path.startswith("/api/v1/detections/") and path.endswith("/approvals") and method=="POST": return "approval_request"
     if path.startswith("/api/v1/automation/approvals"):
         if path.endswith("/review"): return "approval_review"
         if path.endswith("/execute"): return "response_execute"

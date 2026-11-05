@@ -15,3 +15,8 @@ def test_sensitive_routes_have_explicit_policy_categories() -> None:
     assert _category("POST", "/api/v1/automation/approvals") == "approval_request"
     assert _category("POST", "/api/v1/automation/approvals/id/review") == "approval_review"
     assert _category("POST", "/api/v1/automation/approvals/id/execute") == "response_execute"
+
+
+def test_listing_detection_approvals_is_a_read_not_an_approval_request() -> None:
+    assert _category("GET", "/api/v1/detections/id/approvals") == "read"
+    assert _category("POST", "/api/v1/detections/id/approvals") == "approval_request"

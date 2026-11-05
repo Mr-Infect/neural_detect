@@ -224,6 +224,22 @@ async def test_detection(rule_id: UUID, fixtures: FixtureRequest, session: Annot
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@router.get("/{rule_id}/approvals")
+async def list_approvals(rule_id: UUID, session: Annotated[AsyncSession, Depends(get_session)]) -> list[dict[str, Any]]:
+    rule = await _load(rule_id, session)
+    rows = (await session.scalars(
+        select(DetectionApproval).where(DetectionApproval.detection_rule_id == rule.id)
+        .order_by(DetectionApproval.created_at.desc()).limit(20)
+    )).all()
+    now = datetime.now(UTC)
+    return [{
+        "id": str(row.id), "status": "expired" if row.status in {"pending", "approved"} and row.expires_at <= now else row.status,
+        "rule_version": row.rule_version, "current_version": rule.current_version,
+        "requested_by": row.requested_by, "reviewer": row.reviewer, "decision_note": row.decision_note,
+        "created_at": row.created_at.isoformat(), "expires_at": row.expires_at.isoformat(),
+    } for row in rows]
+
+
 @router.post("/{rule_id}/approvals", status_code=201)
 async def request_approval(rule_id: UUID, payload: ApprovalRequest, request: Request, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
     rule = await _load(rule_id, session)

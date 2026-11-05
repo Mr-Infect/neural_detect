@@ -58,13 +58,21 @@ if ! grep -q '^ND_BOOTSTRAP_ADMIN_PASSWORD=' .env || grep -q '^ND_BOOTSTRAP_ADMI
     printf 'ND_BOOTSTRAP_ADMIN_PASSWORD=%s\n' "$ADMIN_PASSWORD" >> .env
   fi
 fi
+if ! grep -q '^ND_KIBANA_ENCRYPTION_KEY=' .env || grep -q '^ND_KIBANA_ENCRYPTION_KEY=generate-with-openssl-rand-hex-32$' .env; then
+  KIBANA_KEY="$(openssl rand -hex 32)"
+  if grep -q '^ND_KIBANA_ENCRYPTION_KEY=' .env; then
+    sed -i "s#^ND_KIBANA_ENCRYPTION_KEY=.*#ND_KIBANA_ENCRYPTION_KEY=$KIBANA_KEY#" .env
+  else
+    printf 'ND_KIBANA_ENCRYPTION_KEY=%s\n' "$KIBANA_KEY" >> .env
+  fi
+fi
 for entry in 'ND_OPA_URL=http://opa:8181' 'ND_SOAR_WEBHOOK_URL=' 'ND_SOAR_WEBHOOK_TOKEN='; do
   key="${entry%%=*}"
   grep -q "^$key=" .env || printf '%s\n' "$entry" >> .env
 done
 chmod 600 .env
 
-if grep -Eq '^(POSTGRES_PASSWORD|ND_SECRET_KEY|ND_BOOTSTRAP_ADMIN_PASSWORD)=((replace-me)|(replace-with-a-random-secret-before-deployment)|(generate-a-random-32-byte-secret))$' .env; then
+if grep -Eq '^(POSTGRES_PASSWORD|ND_SECRET_KEY|ND_BOOTSTRAP_ADMIN_PASSWORD|ND_KIBANA_ENCRYPTION_KEY)=((replace-me)|(replace-with-a-random-secret-before-deployment)|(generate-a-random-32-byte-secret)|(generate-with-openssl-rand-hex-32))$' .env; then
   echo ".env still contains example secrets. Replace them before setup." >&2
   exit 1
 fi
