@@ -18,7 +18,9 @@ jobs:
       - run: ruff check apps ai_engine ai_security core detection_engine integrations scripts tests
       - run: pytest -q
       - run: python -m scripts.validate_detections
-      - run: pip-audit --strict -r requirements.lock
+      # PYSEC-2026-2447: diskcache 5.6.3 (transitive via pySigma) has no fixed release yet.
+      # Ignored explicitly so any *new* advisory still fails CI. Remove once diskcache publishes a fix.
+      - run: pip-audit --strict --ignore-vuln PYSEC-2026-2447 -r requirements.lock
       - uses: actions/setup-node@v4
         with:
           node-version: "22.13.1"
