@@ -10,7 +10,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Require release metadata
         run: |
           test -f LICENSE || { echo "A project license must be selected before publishing an open-source release." >&2; exit 1; }
